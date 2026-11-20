@@ -1,0 +1,9 @@
+cd /путь/к/репозиторию
+bash setup_rec_studio_v2.sh
+sed -i 's|ВАШ_НИК/ВАШ_РЕПОЗИТОРИЙ|НИК/РЕПОЗИТОРИЙ|g' app/src/main/java/com/example/recstudio/MainActivity.kt
+git add .
+git commit -m "Build REC Studio APK"
+git branch -M main
+git push -u origin main
+gh run list --limit 5
+gh run download --name rec-studio-apk
