@@ -1,0 +1,1623 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>REC Studio</title>
+  <style>
+    :root {
+      --bg: #080511;
+      --surface: #140d24;
+      --surface-2: #1d1333;
+      --border: rgba(255, 255, 255, 0.08);
+      --text: #f7f4ff;
+      --muted: #9e92bc;
+      --purple: #6c3ef4;
+      --purple-glow: rgba(108, 62, 244, 0.38);
+      --red-1: #ff285c;
+      --red-2: #b9133c;
+      --green: #22c55e;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      background: #040208;
+      color: var(--text);
+      display: flex;
+      justify-content: center;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    .phone {
+      width: 100%;
+      max-width: 430px;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 50% 24%, rgba(255, 40, 92, 0.2), transparent 44%),
+        radial-gradient(circle at 50% 8%, rgba(108, 62, 244, 0.28), transparent 56%),
+        var(--bg);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding-bottom: 80px;
+      position: relative;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 20px 10px;
+    }
+
+    .rec-badge {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+    }
+
+    .rec-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--red-1);
+      box-shadow: 0 0 14px rgba(255, 40, 92, 0.85);
+    }
+
+    .rec-dot.active {
+      animation: pulse 1s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.25); opacity: 0.6; }
+    }
+
+    .icon-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+
+    .screen {
+      display: none;
+      padding: 6px 18px 18px;
+    }
+
+    .screen.active {
+      display: block;
+    }
+
+    .record-hero {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin: 10px 0 20px;
+    }
+
+    .record-ring {
+      width: 176px;
+      height: 176px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255, 40, 92, 0.25) 44%, rgba(255, 40, 92, 0.07) 68%, transparent 74%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: none;
+      cursor: pointer;
+      transition: transform 0.14s ease;
+    }
+
+    .record-ring:active {
+      transform: scale(0.96);
+    }
+
+    .record-core {
+      width: 118px;
+      height: 118px;
+      border-radius: 50%;
+      background: linear-gradient(150deg, #ff3366, var(--red-2));
+      box-shadow: 0 12px 34px rgba(255, 40, 92, 0.45), inset 0 1px 1px rgba(255, 255, 255, 0.35);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+    }
+
+    .record-title {
+      font-size: 27px;
+      font-weight: 700;
+      margin-top: 8px;
+      letter-spacing: -0.3px;
+    }
+
+    .record-sub {
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 5px;
+      text-align: center;
+      max-width: 340px;
+      line-height: 1.35;
+    }
+
+    .live-controls {
+      display: none;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .live-controls.show {
+      display: flex;
+    }
+
+    .pill-btn {
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      color: var(--text);
+      padding: 9px 16px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .pill-btn.stop {
+      background: rgba(255, 40, 92, 0.18);
+      border-color: rgba(255, 40, 92, 0.5);
+      color: #ff94ae;
+    }
+
+    .mode-bar {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      background: rgba(20, 13, 36, 0.92);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 5px;
+      margin-bottom: 14px;
+    }
+
+    .mode-btn {
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      padding: 11px 6px;
+      border-radius: 19px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+      font-size: 13px;
+      font-weight: 600;
+      transition: background 0.18s ease, color 0.18s ease;
+    }
+
+    .mode-btn.active {
+      background: linear-gradient(145deg, #7648ff, #582be0);
+      color: #fff;
+      box-shadow: 0 6px 18px var(--purple-glow);
+    }
+
+    .area-box {
+      display: none;
+      background: rgba(108, 62, 244, 0.12);
+      border: 1.5px dashed rgba(154, 118, 255, 0.75);
+      border-radius: 18px;
+      padding: 12px 14px;
+      margin-bottom: 14px;
+      font-size: 12px;
+      color: #e6dcff;
+    }
+
+    .area-box.show {
+      display: block;
+    }
+
+    .area-presets {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+      flex-wrap: wrap;
+    }
+
+    .card {
+      background: rgba(20, 13, 36, 0.94);
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      padding: 16px 14px;
+      margin-bottom: 14px;
+    }
+
+    .toggles-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      text-align: center;
+    }
+
+    .toggle-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 9px;
+      font-size: 13px;
+      color: #cfc6e6;
+    }
+
+    .switch {
+      width: 50px;
+      height: 28px;
+      border-radius: 999px;
+      background: #2a2042;
+      position: relative;
+      cursor: pointer;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      transition: background 0.2s ease;
+    }
+
+    .switch.on {
+      background: var(--purple);
+    }
+
+    .switch::after {
+      content: "";
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #fff;
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+      transition: transform 0.2s ease;
+    }
+
+    .switch.on::after {
+      transform: translateX(22px);
+    }
+
+    .status-row {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border);
+      font-size: 12px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .status-row strong.ok {
+      color: #86efac;
+    }
+
+    .status-row strong.warn {
+      color: #fca5a5;
+    }
+
+    .vu-wrap {
+      margin-top: 10px;
+    }
+
+    .vu-track {
+      width: 100%;
+      height: 7px;
+      border-radius: 999px;
+      background: #221738;
+      overflow: hidden;
+    }
+
+    .vu-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #6c3ef4, #22c55e);
+      transition: width 0.06s linear;
+    }
+
+    .cam-controls-card {
+      display: none;
+      background: rgba(20, 13, 36, 0.94);
+      border: 1px solid rgba(108, 62, 244, 0.45);
+      border-radius: 20px;
+      padding: 12px 14px;
+      margin-bottom: 14px;
+    }
+
+    .cam-controls-card.show {
+      display: block;
+    }
+
+    .cam-controls-head {
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: #e2d8ff;
+    }
+
+    .cam-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .chip-btn {
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      color: var(--text);
+      padding: 6px 11px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .chip-btn.active {
+      background: var(--purple);
+      border-color: var(--purple);
+    }
+
+    .facecam-float {
+      position: fixed;
+      top: 136px;
+      right: 18px;
+      width: 112px;
+      height: 112px;
+      border-radius: 50%;
+      overflow: hidden;
+      border: 3px solid #7c4dff;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.65), 0 0 20px rgba(108, 62, 244, 0.45);
+      background: #120b22;
+      z-index: 998;
+      display: none;
+      touch-action: none;
+      cursor: grab;
+    }
+
+    .facecam-float.show {
+      display: block;
+    }
+
+    .facecam-float.rect {
+      border-radius: 20px;
+      width: 132px;
+      height: 98px;
+    }
+
+    .facecam-float.size-s {
+      width: 88px;
+      height: 88px;
+    }
+    .facecam-float.rect.size-s {
+      width: 108px;
+      height: 80px;
+    }
+
+    .facecam-float.size-l {
+      width: 140px;
+      height: 140px;
+    }
+    .facecam-float.rect.size-l {
+      width: 164px;
+      height: 120px;
+    }
+
+    .facecam-float video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1);
+      pointer-events: none;
+    }
+
+    .facecam-hint {
+      position: absolute;
+      bottom: 4px;
+      left: 0;
+      right: 0;
+      text-align: center;
+      font-size: 9px;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.85);
+      text-shadow: 0 1px 3px #000;
+      pointer-events: none;
+    }
+
+    .overlay-ctrl {
+      position: fixed;
+      top: 76px;
+      left: 16px;
+      display: none;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 8px;
+      border-radius: 999px;
+      background: rgba(22, 14, 40, 0.92);
+      border: 1px solid rgba(154, 118, 255, 0.55);
+      box-shadow: 0 10px 26px rgba(0, 0, 0, 0.65), 0 0 18px rgba(108, 62, 244, 0.35);
+      backdrop-filter: blur(10px);
+      z-index: 1000;
+      touch-action: none;
+      cursor: grab;
+    }
+
+    .overlay-ctrl.show {
+      display: flex;
+    }
+
+    .overlay-ctrl.mini {
+      padding: 6px 10px;
+      gap: 6px;
+    }
+
+    .overlay-ctrl.mini .ov-btn,
+    .overlay-ctrl.mini .ov-timer {
+      display: none;
+    }
+
+    .ov-grip {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--red-1);
+      box-shadow: 0 0 10px rgba(255, 40, 92, 0.9);
+      flex-shrink: 0;
+    }
+
+    .ov-grip.paused {
+      background: #facc15;
+      box-shadow: 0 0 10px rgba(250, 204, 21, 0.7);
+    }
+
+    .ov-timer {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+      padding: 0 2px;
+      user-select: none;
+    }
+
+    .ov-btn {
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      color: var(--text);
+      border-radius: 999px;
+      padding: 5px 10px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .ov-btn.stop {
+      background: rgba(255, 40, 92, 0.24);
+      border-color: rgba(255, 40, 92, 0.55);
+      color: #ffa2b9;
+    }
+
+    .ov-mini-btn {
+      border: none;
+      background: rgba(255, 255, 255, 0.08);
+      color: #e6dcff;
+      border-radius: 999px;
+      padding: 4px 8px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    /* Экран обратного отсчёта перед стартом */
+    .countdown-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(6, 3, 14, 0.84);
+      backdrop-filter: blur(10px);
+      z-index: 1200;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+    }
+
+    .countdown-modal.show {
+      display: flex;
+    }
+
+    .countdown-num {
+      width: 132px;
+      height: 132px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255, 40, 92, 0.35), rgba(108, 62, 244, 0.22));
+      border: 2px solid rgba(255, 51, 102, 0.75);
+      box-shadow: 0 0 36px rgba(255, 40, 92, 0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 56px;
+      font-weight: 800;
+      color: #fff;
+    }
+
+    .countdown-label {
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .storage-card {
+      background: rgba(20, 13, 36, 0.94);
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      padding: 16px;
+    }
+
+    .storage-title {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 5px;
+    }
+
+    .storage-desc {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 12px;
+      line-height: 1.4;
+    }
+
+    .video-tile-btn {
+      width: 100%;
+      padding: 14px 16px;
+      border-radius: 18px;
+      border: 1px solid rgba(154, 118, 255, 0.45);
+      background: linear-gradient(135deg, rgba(108, 62, 244, 0.28), rgba(29, 19, 51, 0.95));
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .video-tile-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .video-tile-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 13px;
+      background: rgba(108, 62, 244, 0.35);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #d7c7ff;
+      flex-shrink: 0;
+    }
+
+    .video-tile-title {
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    .video-tile-sub {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .pick-btn {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 15px;
+      border: 1px solid rgba(108, 62, 244, 0.55);
+      background: rgba(108, 62, 244, 0.22);
+      color: #e6dcff;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .save-btn {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 15px;
+      border: 1px solid rgba(34, 197, 94, 0.5);
+      background: rgba(34, 197, 94, 0.16);
+      color: #86efac;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+
+    .selected-video-box {
+      margin-top: 12px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 10px;
+    }
+
+    #editorVideo {
+      width: 100%;
+      max-height: 210px;
+      border-radius: 12px;
+      background: #000;
+      display: block;
+    }
+
+    .clean-voice-btn {
+      width: 100%;
+      padding: 13px;
+      border-radius: 16px;
+      border: 1px solid rgba(108, 62, 244, 0.6);
+      background: linear-gradient(135deg, rgba(108, 62, 244, 0.35), rgba(255, 40, 92, 0.22));
+      color: #fff;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      margin-top: 12px;
+    }
+
+    .clean-voice-btn.cleaned {
+      background: rgba(34, 197, 94, 0.2);
+      border-color: rgba(34, 197, 94, 0.65);
+      color: #86efac;
+    }
+
+    .note {
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    .recent-list {
+      margin-top: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .recent-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 9px 11px;
+      border-radius: 14px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+    }
+
+    .recent-name {
+      font-size: 12px;
+      color: var(--text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .bottom-nav {
+      position: fixed;
+      bottom: 0;
+      width: 100%;
+      max-width: 430px;
+      background: rgba(13, 8, 25, 0.96);
+      backdrop-filter: blur(12px);
+      border-top: 1px solid var(--border);
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      padding: 8px 0 10px;
+      z-index: 50;
+    }
+
+    .nav-btn {
+      background: none;
+      border: none;
+      color: var(--muted);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .nav-btn.active {
+      color: #b79eff;
+    }
+  </style>
+</head>
+<body>
+  <!-- Обратный отсчёт перед стартом записи -->
+  <div class="countdown-modal" id="countdownModal">
+    <div class="countdown-num" id="countdownNum">3</div>
+    <div class="countdown-label">Запись начнётся через пару секунд...</div>
+    <button class="pill-btn stop" id="cancelCountdownBtn" type="button">Отмена</button>
+  </div>
+
+  <div class="overlay-ctrl" id="overlayCtrl">
+    <span class="ov-grip" id="ovGrip"></span>
+    <span class="ov-timer" id="ovTimer">00:00</span>
+    <button class="ov-btn" id="ovPauseBtn">Пауза</button>
+    <button class="ov-btn stop" id="ovStopBtn">Стоп</button>
+    <button class="ov-mini-btn" id="ovMiniBtn" title="Свернуть или развернуть">_</button>
+  </div>
+
+  <div class="facecam-float" id="facecamFloat">
+    <video id="facecamVideo" autoplay muted playsinline></video>
+    <div class="facecam-hint">Тяни</div>
+  </div>
+
+  <div class="phone">
+    <div>
+      <div class="topbar">
+        <div class="rec-badge">
+          <span class="rec-dot" id="recDot"></span>
+          <span id="topTitle">REC</span>
+        </div>
+        <button class="icon-btn" id="permCheckBtn" title="Запросить микрофон и камеру">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+        </button>
+      </div>
+
+      <!-- ГЛАВНАЯ -->
+      <section class="screen active" id="screen-home">
+        <div class="record-hero">
+          <button class="record-ring" id="mainRecBtn" aria-label="Начать запись">
+            <span class="record-core">
+              <svg width="42" height="42" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"></path>
+              </svg>
+            </span>
+          </button>
+          <div class="record-title" id="recTitle">Начать запись</div>
+          <div class="record-sub" id="recSub">Полный экран: записывает весь экран целиком</div>
+
+          <div class="live-controls" id="liveControls">
+            <button class="pill-btn" id="pauseBtn">Пауза</button>
+            <button class="pill-btn stop" id="stopBtn">Стоп</button>
+          </div>
+        </div>
+
+        <div class="mode-bar">
+          <button class="mode-btn active" data-mode="Экран">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="6" y="2" width="12" height="20" rx="2"></rect>
+            </svg>
+            <span>Экран</span>
+          </button>
+          <button class="mode-btn" data-mode="Окно">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="4" width="18" height="16" rx="2"></rect>
+              <line x1="3" y1="9" x2="21" y2="9"></line>
+            </svg>
+            <span>Окно</span>
+          </button>
+          <button class="mode-btn" data-mode="Область">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"></path>
+            </svg>
+            <span>Область</span>
+          </button>
+        </div>
+
+        <div class="area-box" id="areaBox">
+          <div>Режим <strong>«Область»</strong> — выбранный фрагмент: <strong id="areaPresetLabel">Весь кадр (100%)</strong></div>
+          <div class="area-presets">
+            <button class="chip-btn active" data-area="Весь кадр (100%)">100%</button>
+            <button class="chip-btn" data-area="Центр игры (80%)">Центр 80%</button>
+            <button class="chip-btn" data-area="Без краёв (90%)">Без краёв 90%</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="toggles-grid">
+            <div class="toggle-item">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="2" width="6" height="11" rx="3"></rect>
+                <path d="M5 10a7 7 0 0 0 14 0M12 17v5"></path>
+              </svg>
+              <button class="switch on" id="micSwitch" aria-label="Микрофон"></button>
+              <span>Микрофон</span>
+            </div>
+
+            <div class="toggle-item">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                <path d="M15.5 8.5a5 5 0 0 1 0 7"></path>
+              </svg>
+              <button class="switch on" id="sysSwitch" aria-label="Системный звук"></button>
+              <span>Системный звук</span>
+            </div>
+
+            <div class="toggle-item">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                <circle cx="12" cy="13" r="4"></circle>
+              </svg>
+              <button class="switch" id="camSwitch" aria-label="Камера"></button>
+              <span>Камера</span>
+            </div>
+          </div>
+
+          <div class="status-row">
+            <span>Сохранение видео:</span>
+            <strong class="ok">Папка «Видео» (Movies)</strong>
+          </div>
+
+          <div class="status-row">
+            <span>Захват экрана:</span>
+            <strong id="capStatusText">Готов</strong>
+          </div>
+
+          <div class="status-row">
+            <span>Микрофон:</span>
+            <strong id="micStatusText">Не запрошен</strong>
+          </div>
+
+          <div class="vu-wrap">
+            <div class="vu-track">
+              <div class="vu-fill" id="vuFill"></div>
+            </div>
+          </div>
+
+          <div class="status-row">
+            <span>Камера (Facecam):</span>
+            <strong id="camStatusText">Выключена</strong>
+          </div>
+        </div>
+
+        <div class="cam-controls-card" id="camControlsCard">
+          <div class="cam-controls-head">Окошко лица (можно перетаскивать пальцем по экрану)</div>
+          <div class="cam-chips">
+            <button class="chip-btn active" data-shape="circle">Круг</button>
+            <button class="chip-btn" data-shape="rect">Прямоугольник</button>
+            <button class="chip-btn" data-size="s">S</button>
+            <button class="chip-btn active" data-size="m">M</button>
+            <button class="chip-btn" data-size="l">L</button>
+            <button class="chip-btn" id="flipCamBtn">Сменить камеру</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- МОНТАЖ -->
+      <section class="screen" id="screen-editor">
+        <div class="storage-card">
+          <div class="storage-title">Редактор видео и голоса</div>
+          <div class="storage-desc">
+            Открой видео из памяти телефона, чтобы проверить звук, включить очистку голоса и сохранить ролик в папку видео.
+          </div>
+
+          <button class="pick-btn" id="pickVideoBtn">Выбрать видео из памяти телефона</button>
+          <input type="file" id="videoFileInput" accept="video/*" hidden />
+
+          <div class="selected-video-box" id="editorPlayerBox" style="display:none;">
+            <video id="editorVideo" controls playsinline></video>
+            <button class="clean-voice-btn" id="cleanVoiceBtn">Очистить голос от лишних звуков</button>
+            <button class="save-btn" id="saveVideoBtn" type="button">Сохранить видео в папку «Видео»</button>
+            <div class="note" id="editorNote">
+              Видео загружено. Если в ролике есть голос, нажми кнопку выше при воспроизведении.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ФАЙЛЫ -->
+      <section class="screen" id="screen-files">
+        <div class="storage-card">
+          <div class="storage-title">Видеофайлы телефона</div>
+          <div class="storage-desc">
+            Быстрый вход в категорию видео — все записи приложения направляются в папку видео.
+          </div>
+
+          <button class="video-tile-btn" id="quickVideosBtn" type="button">
+            <span class="video-tile-left">
+              <span class="video-tile-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z"></path>
+                </svg>
+              </span>
+              <span>
+                <span class="video-tile-title">Видео</span>
+                <span class="video-tile-sub">Открыть все видеофайлы из памяти</span>
+              </span>
+            </span>
+            <span style="font-size:12px;color:#c9b8ff;font-weight:700;">Открыть →</span>
+          </button>
+
+          <input type="file" id="filesInput" accept="video/*" hidden />
+
+          <div class="recent-list" id="recentVideosList">
+            <div class="note">Записанные и выбранные видео будут появляться здесь для быстрого перехода в «Монтаж».</div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <nav class="bottom-nav">
+      <button class="nav-btn active" data-nav="home">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 3l9 8h-3v9h-5v-6h-2v6H6v-9H3l9-8z"></path>
+        </svg>
+        <span>Главная</span>
+      </button>
+
+      <button class="nav-btn" data-nav="editor">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="6" cy="6" r="3"></circle>
+          <circle cx="6" cy="18" r="3"></circle>
+          <line x1="20" y1="4" x2="8.12" y2="15.88"></line>
+          <line x1="14.47" y1="14.48" x2="20" y2="20"></line>
+          <line x1="8.12" y1="8.12" x2="12" y2="12"></line>
+        </svg>
+        <span>Монтаж</span>
+      </button>
+
+      <button class="nav-btn" data-nav="files">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"></path>
+        </svg>
+        <span>Файлы</span>
+      </button>
+    </nav>
+  </div>
+
+  <script>
+    const micSwitch = document.getElementById("micSwitch");
+    const sysSwitch = document.getElementById("sysSwitch");
+    const camSwitch = document.getElementById("camSwitch");
+    const micStatusText = document.getElementById("micStatusText");
+    const camStatusText = document.getElementById("camStatusText");
+    const capStatusText = document.getElementById("capStatusText");
+    const vuFill = document.getElementById("vuFill");
+
+    const facecamFloat = document.getElementById("facecamFloat");
+    const facecamVideo = document.getElementById("facecamVideo");
+    const camControlsCard = document.getElementById("camControlsCard");
+
+    const overlayCtrl = document.getElementById("overlayCtrl");
+    const ovGrip = document.getElementById("ovGrip");
+    const ovTimer = document.getElementById("ovTimer");
+    const ovPauseBtn = document.getElementById("ovPauseBtn");
+    const ovStopBtn = document.getElementById("ovStopBtn");
+    const ovMiniBtn = document.getElementById("ovMiniBtn");
+
+    const countdownModal = document.getElementById("countdownModal");
+    const countdownNum = document.getElementById("countdownNum");
+    const cancelCountdownBtn = document.getElementById("cancelCountdownBtn");
+
+    const areaBox = document.getElementById("areaBox");
+    const areaPresetLabel = document.getElementById("areaPresetLabel");
+
+    let currentMode = "Экран";
+    let currentArea = "Весь кадр (100%)";
+
+    let micStream = null;
+    let camStream = null;
+    let displayStream = null;
+    let mediaRecorder = null;
+    let recordedChunks = [];
+
+    let facingMode = "user";
+    let vuAnim = null;
+    let vuCtx = null;
+
+    let recState = "idle"; // idle | countdown | recording | paused
+    let countdownTimer = null;
+    let sec = 0;
+    let timer = null;
+
+    const sessionVideos = [];
+    let currentVideoFile = null;
+
+    const modeDescriptions = {
+      "Экран": "Полный экран: записывает весь экран целиком",
+      "Окно": "Окно: захват выбранного окна или приложения",
+      "Область": "Область: запись только заданного фрагмента экрана"
+    };
+
+    function saveFileToVideosFolder(file) {
+      if (!file) return;
+      if (window.AndroidBridge && typeof window.AndroidBridge.saveVideoToGallery === "function") {
+        window.AndroidBridge.saveVideoToGallery(file.name);
+      }
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(file);
+      a.download = file.name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+
+    function startVuMeter(stream) {
+      try {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        vuCtx = new AC();
+        const src = vuCtx.createMediaStreamSource(stream);
+        const analyser = vuCtx.createAnalyser();
+        analyser.fftSize = 256;
+        src.connect(analyser);
+        const data = new Uint8Array(analyser.frequencyBinCount);
+
+        function tick() {
+          if (!micStream) {
+            vuFill.style.width = "0%";
+            return;
+          }
+          analyser.getByteFrequencyData(data);
+          let sum = 0;
+          for (let i = 0; i < data.length; i++) sum += data[i];
+          const avg = sum / data.length;
+          vuFill.style.width = Math.min(100, Math.round(avg * 2.2)) + "%";
+          vuAnim = requestAnimationFrame(tick);
+        }
+        tick();
+      } catch (e) {}
+    }
+
+    async function requestMicrophone() {
+      try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          micStatusText.textContent = "Не поддерживается";
+          micStatusText.className = "warn";
+          return false;
+        }
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        micStatusText.textContent = "Разрешён (активен)";
+        micStatusText.className = "ok";
+        micSwitch.classList.add("on");
+        startVuMeter(micStream);
+        return true;
+      } catch (err) {
+        micStatusText.textContent = "Отклонён или заблокирован";
+        micStatusText.className = "warn";
+        micSwitch.classList.remove("on");
+        return false;
+      }
+    }
+
+    function stopMicrophone() {
+      if (micStream) {
+        micStream.getTracks().forEach((t) => t.stop());
+        micStream = null;
+      }
+      if (vuAnim) cancelAnimationFrame(vuAnim);
+      vuFill.style.width = "0%";
+      micStatusText.textContent = "Выключен";
+      micStatusText.className = "";
+    }
+
+    async function startCamera() {
+      try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          camStatusText.textContent = "Не поддерживается";
+          camStatusText.className = "warn";
+          return false;
+        }
+        if (camStream) camStream.getTracks().forEach((t) => t.stop());
+        camStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode },
+          audio: false
+        });
+        facecamVideo.srcObject = camStream;
+        facecamVideo.style.transform = facingMode === "user" ? "scaleX(-1)" : "scaleX(1)";
+        facecamFloat.classList.add("show");
+        camControlsCard.classList.add("show");
+        camSwitch.classList.add("on");
+        camStatusText.textContent = facingMode === "user" ? "Фронтальная активна" : "Основная активна";
+        camStatusText.className = "ok";
+        return true;
+      } catch (err) {
+        camSwitch.classList.remove("on");
+        facecamFloat.classList.remove("show");
+        camControlsCard.classList.remove("show");
+        camStatusText.textContent = "Нет доступа к камере";
+        camStatusText.className = "warn";
+        return false;
+      }
+    }
+
+    function stopCamera() {
+      if (camStream) {
+        camStream.getTracks().forEach((t) => t.stop());
+        camStream = null;
+      }
+      facecamVideo.srcObject = null;
+      facecamFloat.classList.remove("show");
+      camControlsCard.classList.remove("show");
+      camStatusText.textContent = "Выключена";
+      camStatusText.className = "";
+    }
+
+    async function startScreenCapture() {
+      if (window.AndroidBridge && typeof window.AndroidBridge.startScreenRecord === "function") {
+        window.AndroidBridge.startScreenRecord(currentMode, currentArea, "Movies/REC Studio");
+        capStatusText.textContent = `APK: ${currentMode} → Видео`;
+        capStatusText.className = "ok";
+        return true;
+      }
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+        capStatusText.textContent = "Браузер не даёт полный экран (нужен APK)";
+        capStatusText.className = "warn";
+        return false;
+      }
+
+      try {
+        displayStream = await navigator.mediaDevices.getDisplayMedia({
+          video: { frameRate: 30 },
+          audio: sysSwitch.classList.contains("on")
+        });
+
+        const tracks = [...displayStream.getVideoTracks()];
+        if (micSwitch.classList.contains("on") && micStream) {
+          tracks.push(...micStream.getAudioTracks());
+        }
+        if (sysSwitch.classList.contains("on") && displayStream.getAudioTracks().length) {
+          tracks.push(...displayStream.getAudioTracks());
+        }
+
+        const combined = new MediaStream(tracks);
+        recordedChunks = [];
+        mediaRecorder = new MediaRecorder(combined);
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) recordedChunks.push(e.data);
+        };
+        mediaRecorder.onstop = () => {
+          const blob = new Blob(recordedChunks, { type: "video/webm" });
+          const file = new File([blob], `rec_${currentMode.toLowerCase()}_${Date.now()}.webm`, {
+            type: "video/webm"
+          });
+          loadVideoIntoEditor(file, true);
+        };
+        mediaRecorder.start();
+
+        displayStream.getVideoTracks()[0].addEventListener("ended", () => {
+          stopRecording();
+        });
+
+        capStatusText.textContent = `Идёт захват (${currentMode})`;
+        capStatusText.className = "ok";
+        return true;
+      } catch (err) {
+        capStatusText.textContent = "Захват не запущен (нужен APK или разрешение)";
+        capStatusText.className = "warn";
+        return false;
+      }
+    }
+
+    function stopScreenCapture() {
+      if (window.AndroidBridge && typeof window.AndroidBridge.stopScreenRecord === "function") {
+        window.AndroidBridge.stopScreenRecord();
+      }
+      if (mediaRecorder && mediaRecorder.state !== "inactive") {
+        mediaRecorder.stop();
+      }
+      if (displayStream) {
+        displayStream.getTracks().forEach((t) => t.stop());
+        displayStream = null;
+      }
+      capStatusText.textContent = "Готов";
+      capStatusText.className = "";
+    }
+
+    micSwitch.addEventListener("click", async () => {
+      if (!micSwitch.classList.contains("on")) await requestMicrophone();
+      else {
+        micSwitch.classList.remove("on");
+        stopMicrophone();
+      }
+    });
+
+    camSwitch.addEventListener("click", async () => {
+      if (!camSwitch.classList.contains("on")) await startCamera();
+      else {
+        camSwitch.classList.remove("on");
+        stopCamera();
+      }
+    });
+
+    document.getElementById("permCheckBtn").addEventListener("click", async () => {
+      await requestMicrophone();
+      if (camSwitch.classList.contains("on")) await startCamera();
+    });
+
+    sysSwitch.addEventListener("click", () => sysSwitch.classList.toggle("on"));
+
+    document.querySelectorAll("[data-shape]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll("[data-shape]").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        facecamFloat.classList.toggle("rect", btn.dataset.shape === "rect");
+      });
+    });
+
+    document.querySelectorAll("[data-size]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll("[data-size]").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        facecamFloat.classList.remove("size-s", "size-l");
+        if (btn.dataset.size === "s") facecamFloat.classList.add("size-s");
+        if (btn.dataset.size === "l") facecamFloat.classList.add("size-l");
+      });
+    });
+
+    document.getElementById("flipCamBtn").addEventListener("click", async () => {
+      facingMode = facingMode === "user" ? "environment" : "user";
+      await startCamera();
+    });
+
+    function makeDraggable(el, ignoreSelector) {
+      let dragging = false;
+      let offsetX = 0;
+      let offsetY = 0;
+
+      function start(clientX, clientY, target) {
+        if (ignoreSelector && target && target.closest(ignoreSelector)) return;
+        dragging = true;
+        const rect = el.getBoundingClientRect();
+        offsetX = clientX - rect.left;
+        offsetY = clientY - rect.top;
+        el.style.right = "auto";
+      }
+
+      function move(clientX, clientY) {
+        if (!dragging) return;
+        const maxX = window.innerWidth - el.offsetWidth;
+        const maxY = window.innerHeight - el.offsetHeight;
+        const x = Math.max(0, Math.min(maxX, clientX - offsetX));
+        const y = Math.max(0, Math.min(maxY, clientY - offsetY));
+        el.style.left = x + "px";
+        el.style.top = y + "px";
+      }
+
+      el.addEventListener("touchstart", (e) => {
+        const t = e.touches[0];
+        start(t.clientX, t.clientY, e.target);
+      }, { passive: true });
+
+      window.addEventListener("touchmove", (e) => {
+        if (!dragging) return;
+        const t = e.touches[0];
+        move(t.clientX, t.clientY);
+      }, { passive: true });
+
+      window.addEventListener("touchend", () => { dragging = false; });
+
+      el.addEventListener("mousedown", (e) => start(e.clientX, e.clientY, e.target));
+      window.addEventListener("mousemove", (e) => move(e.clientX, e.clientY));
+      window.addEventListener("mouseup", () => { dragging = false; });
+    }
+
+    makeDraggable(facecamFloat, null);
+    makeDraggable(overlayCtrl, "button");
+
+    ovMiniBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      overlayCtrl.classList.toggle("mini");
+      ovMiniBtn.textContent = overlayCtrl.classList.contains("mini") ? "+" : "_";
+    });
+
+    document.querySelectorAll(".mode-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".mode-btn").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        currentMode = btn.dataset.mode;
+        areaBox.classList.toggle("show", currentMode === "Область");
+        if (recState === "idle") {
+          recSub.textContent = modeDescriptions[currentMode];
+        }
+      });
+    });
+
+    document.querySelectorAll("[data-area]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll("[data-area]").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        currentArea = btn.dataset.area;
+        areaPresetLabel.textContent = currentArea;
+      });
+    });
+
+    const recDot = document.getElementById("recDot");
+    const mainRecBtn = document.getElementById("mainRecBtn");
+    const recTitle = document.getElementById("recTitle");
+    const recSub = document.getElementById("recSub");
+    const liveControls = document.getElementById("liveControls");
+    const pauseBtn = document.getElementById("pauseBtn");
+    const stopBtn = document.getElementById("stopBtn");
+
+    function fmt(s) {
+      const m = String(Math.floor(s / 60)).padStart(2, "0");
+      const r = String(s % 60).padStart(2, "0");
+      return `${m}:${r}`;
+    }
+
+    function renderRecState() {
+      const timeStr = fmt(sec);
+      ovTimer.textContent = timeStr;
+
+      if (recState === "idle") {
+        countdownModal.classList.remove("show");
+        recDot.classList.remove("active");
+        recTitle.textContent = "Начать запись";
+        recSub.textContent = modeDescriptions[currentMode];
+        liveControls.classList.remove("show");
+        overlayCtrl.classList.remove("show", "mini");
+        ovMiniBtn.textContent = "_";
+      } else if (recState === "countdown") {
+        countdownModal.classList.add("show");
+        recDot.classList.remove("active");
+        recTitle.textContent = "Отсчёт...";
+        recSub.textContent = "Подготовка к старту записи";
+      } else if (recState === "recording") {
+        countdownModal.classList.remove("show");
+        recDot.classList.add("active");
+        recTitle.textContent = `Запись · ${timeStr}`;
+        recSub.textContent = `Режим: ${currentMode}${currentMode === "Область" ? " (" + currentArea + ")" : ""}`;
+        liveControls.classList.add("show");
+        overlayCtrl.classList.add("show");
+        ovGrip.classList.remove("paused");
+        pauseBtn.textContent = "Пауза";
+        ovPauseBtn.textContent = "Пауза";
+      } else if (recState === "paused") {
+        countdownModal.classList.remove("show");
+        recDot.classList.remove("active");
+        recTitle.textContent = `Пауза · ${timeStr}`;
+        recSub.textContent = "Нажми «Продолжить», чтобы возобновить";
+        liveControls.classList.add("show");
+        overlayCtrl.classList.add("show");
+        ovGrip.classList.add("paused");
+        pauseBtn.textContent = "Продолжить";
+        ovPauseBtn.textContent = "Продолжить";
+      }
+    }
+
+    function cancelCountdown() {
+      clearInterval(countdownTimer);
+      countdownTimer = null;
+      recState = "idle";
+      renderRecState();
+    }
+
+    async function beginRecordingAfterCountdown() {
+      if (micSwitch.classList.contains("on") && !micStream) await requestMicrophone();
+      if (camSwitch.classList.contains("on") && !camStream) await startCamera();
+      await startScreenCapture();
+
+      sec = 0;
+      recState = "recording";
+      renderRecState();
+      clearInterval(timer);
+      timer = setInterval(() => {
+        if (recState === "recording") {
+          sec += 1;
+          renderRecState();
+        }
+      }, 1000);
+    }
+
+    function startCountdown() {
+      if (recState !== "idle") return;
+      let left = 3;
+      recState = "countdown";
+      countdownNum.textContent = String(left);
+      renderRecState();
+
+      clearInterval(countdownTimer);
+      countdownTimer = setInterval(async () => {
+        left -= 1;
+        if (left > 0) {
+          countdownNum.textContent = String(left);
+        } else {
+          clearInterval(countdownTimer);
+          countdownTimer = null;
+          await beginRecordingAfterCountdown();
+        }
+      }, 1000);
+    }
+
+    function togglePause() {
+      if (recState === "recording") {
+        recState = "paused";
+        if (mediaRecorder && mediaRecorder.state === "recording") mediaRecorder.pause();
+      } else if (recState === "paused") {
+        recState = "recording";
+        if (mediaRecorder && mediaRecorder.state === "paused") mediaRecorder.resume();
+      }
+      renderRecState();
+    }
+
+    function stopRecording() {
+      clearInterval(countdownTimer);
+      countdownTimer = null;
+      clearInterval(timer);
+      recState = "idle";
+      sec = 0;
+      stopScreenCapture();
+      renderRecState();
+    }
+
+    cancelCountdownBtn.addEventListener("click", cancelCountdown);
+
+    mainRecBtn.addEventListener("click", () => {
+      if (recState === "idle") {
+        startCountdown();
+      } else if (recState === "countdown") {
+        cancelCountdown();
+      } else {
+        togglePause();
+      }
+    });
+
+    pauseBtn.addEventListener("click", togglePause);
+    ovPauseBtn.addEventListener("click", togglePause);
+    stopBtn.addEventListener("click", stopRecording);
+    ovStopBtn.addEventListener("click", stopRecording);
+
+    function switchTab(tab) {
+      document.querySelectorAll(".screen").forEach((el) => el.classList.remove("active"));
+      document.getElementById(`screen-${tab}`).classList.add("active");
+      document.querySelectorAll(".nav-btn").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.nav === tab);
+      });
+      document.getElementById("topTitle").textContent =
+        tab === "home" ? "REC" : tab === "editor" ? "МОНТАЖ" : "ФАЙЛЫ";
+    }
+
+    document.querySelectorAll(".nav-btn").forEach((btn) => {
+      btn.addEventListener("click", () => switchTab(btn.dataset.nav));
+    });
+
+    const pickVideoBtn = document.getElementById("pickVideoBtn");
+    const videoFileInput = document.getElementById("videoFileInput");
+    const quickVideosBtn = document.getElementById("quickVideosBtn");
+    const filesInput = document.getElementById("filesInput");
+    const saveVideoBtn = document.getElementById("saveVideoBtn");
+    const editorPlayerBox = document.getElementById("editorPlayerBox");
+    const editorVideo = document.getElementById("editorVideo");
+    const cleanVoiceBtn = document.getElementById("cleanVoiceBtn");
+    const editorNote = document.getElementById("editorNote");
+    const recentVideosList = document.getElementById("recentVideosList");
+
+    let audioCtx = null;
+    let audioSource = null;
+    let highpass = null;
+    let lowpass = null;
+    let voiceFilterActive = false;
+
+    function renderRecentVideos() {
+      if (!sessionVideos.length) {
+        recentVideosList.innerHTML =
+          '<div class="note">Записанные и выбранные видео будут появляться здесь для быстрого перехода в «Монтаж».</div>';
+        return;
+      }
+      recentVideosList.innerHTML = "";
+      sessionVideos.slice(0, 6).forEach((entry) => {
+        const row = document.createElement("div");
+        row.className = "recent-item";
+
+        const nameSpan = document.createElement("span");
+        nameSpan.className = "recent-name";
+        nameSpan.textContent = entry.name;
+
+        const btn = document.createElement("button");
+        btn.className = "pill-btn";
+        btn.style.padding = "5px 11px";
+        btn.textContent = "В монтаж";
+        btn.addEventListener("click", () => loadVideoIntoEditor(entry.file, false));
+
+        row.appendChild(nameSpan);
+        row.appendChild(btn);
+        recentVideosList.appendChild(row);
+      });
+    }
+
+    function loadVideoIntoEditor(file, recordInHistory = true) {
+      if (!file) return;
+      currentVideoFile = file;
+      if (recordInHistory) {
+        sessionVideos.unshift({ name: file.name, file });
+        renderRecentVideos();
+      }
+      const url = URL.createObjectURL(file);
+      editorVideo.src = url;
+      editorPlayerBox.style.display = "block";
+      editorNote.textContent = `Загружен файл: ${file.name} (${(file.size / (1024 * 1024)).toFixed(1)} МБ).`;
+      switchTab("editor");
+    }
+
+    function toggleVoiceFilter() {
+      if (!editorVideo.src) return;
+      if (!audioCtx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AC();
+        audioSource = audioCtx.createMediaElementSource(editorVideo);
+
+        highpass = audioCtx.createBiquadFilter();
+        highpass.type = "highpass";
+        highpass.frequency.value = 180;
+
+        lowpass = audioCtx.createBiquadFilter();
+        lowpass.type = "lowpass";
+        lowpass.frequency.value = 3800;
+
+        audioSource.connect(audioCtx.destination);
+      }
+
+      if (audioCtx.state === "suspended") audioCtx.resume();
+
+      voiceFilterActive = !voiceFilterActive;
+      audioSource.disconnect();
+
+      if (voiceFilterActive) {
+        audioSource.connect(highpass);
+        highpass.connect(lowpass);
+        lowpass.connect(audioCtx.destination);
+        cleanVoiceBtn.classList.add("cleaned");
+        cleanVoiceBtn.textContent = "Очистка голоса включена (нажми для возврата)";
+        editorNote.textContent = "Применён фильтр очистки голоса (срез гула и лишнего шума).";
+      } else {
+        audioSource.connect(audioCtx.destination);
+        cleanVoiceBtn.classList.remove("cleaned");
+        cleanVoiceBtn.textContent = "Очистить голос от лишних звуков";
+        editorNote.textContent = "Включён исходный звук видео.";
+      }
+    }
+
+    pickVideoBtn.addEventListener("click", () => videoFileInput.click());
+    videoFileInput.addEventListener("change", (e) => loadVideoIntoEditor(e.target.files[0], true));
+    cleanVoiceBtn.addEventListener("click", toggleVoiceFilter);
+
+    saveVideoBtn.addEventListener("click", () => {
+      if (!currentVideoFile) return;
+      saveFileToVideosFolder(currentVideoFile);
+      editorNote.textContent = `Отправлено на сохранение в папку видео: ${currentVideoFile.name}.`;
+    });
+
+    quickVideosBtn.addEventListener("click", () => {
+      if (window.AndroidBridge && typeof window.AndroidBridge.openVideosFolder === "function") {
+        window.AndroidBridge.openVideosFolder();
+        return;
+      }
+      filesInput.click();
+    });
+
+    filesInput.addEventListener("change", (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      sessionVideos.unshift({ name: file.name, file });
+      renderRecentVideos();
+    });
+  </script>
+</body>
+</html>
