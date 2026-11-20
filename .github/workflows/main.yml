@@ -171,17 +171,18 @@ jobs:
             'import android.media.MediaRecorder' \
             'import android.media.projection.MediaProjection' \
             'import android.media.projection.MediaProjectionManager' \
+            'import android.net.Uri' \
             'import android.os.Build' \
             'import android.os.Environment' \
             'import android.os.Handler' \
             'import android.os.IBinder' \
             'import android.os.Looper' \
+            'import android.os.ParcelFileDescriptor' \
             'import android.provider.MediaStore' \
             'import android.util.DisplayMetrics' \
             'import android.view.WindowManager' \
             'import android.widget.Toast' \
             'import java.io.File' \
-            'import java.io.FileInputStream' \
             'import java.text.SimpleDateFormat' \
             'import java.util.Date' \
             'import java.util.Locale' \
@@ -197,7 +198,9 @@ jobs:
             '  private var mediaProjection: MediaProjection? = null' \
             '  private var virtualDisplay: VirtualDisplay? = null' \
             '  private var mediaRecorder: MediaRecorder? = null' \
-            '  private var tempFile: File? = null' \
+            '  private var pfd: ParcelFileDescriptor? = null' \
+            '  private var pendingUri: Uri? = null' \
+            '  private var fallbackFile: File? = null' \
             '  private val mainHandler = Handler(Looper.getMainLooper())' \
             '  override fun onBind(intent: Intent?): IBinder? = null' \
             '  override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {' \
@@ -244,24 +247,48 @@ jobs:
             '      @Suppress("DEPRECATION") wm.defaultDisplay.getRealMetrics(metrics)' \
             '      val rawW = metrics.widthPixels.coerceAtLeast(720)' \
             '      val rawH = metrics.heightPixels.coerceAtLeast(1280)' \
-            '      val width = if (rawW > 1080) 1080 else rawW - (rawW % 2)' \
-            '      val height = if (rawW > 1080) ((rawH.toLong() * 1080L) / rawW).toInt().let { it - (it % 2) } else rawH - (rawH % 2)' \
-            '      val outDir = File(cacheDir, "records").apply { mkdirs() }' \
+            '      val targetShort = 720' \
+            '      val width = if (rawW <= rawH) targetShort else ((rawW.toLong() * targetShort) / rawH).toInt().let { it - (it % 2) }' \
+            '      val height = if (rawW <= rawH) ((rawH.toLong() * targetShort) / rawW).toInt().let { it - (it % 2) } else targetShort' \
             '      val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())' \
-            '      val file = File(outDir, "REC_$stamp.mp4")' \
-            '      tempFile = file' \
+            '      val fileName = "REC_$stamp.mp4"' \
             '      val recorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(this) else @Suppress("DEPRECATION") MediaRecorder()' \
             '      recorder.setVideoSource(MediaRecorder.VideoSource.SURFACE)' \
             '      recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)' \
             '      recorder.setVideoEncoder(MediaRecorder.VideoEncoder.H264)' \
             '      recorder.setVideoSize(width, height)' \
-            '      recorder.setVideoFrameRate(30)' \
-            '      recorder.setVideoEncodingBitRate(6_000_000)' \
-            '      recorder.setOutputFile(file.absolutePath)' \
+            '      recorder.setVideoFrameRate(24)' \
+            '      recorder.setVideoEncodingBitRate(2_500_000)' \
+            '      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {' \
+            '        val values = ContentValues().apply {' \
+            '          put(MediaStore.Video.Media.DISPLAY_NAME, fileName)' \
+            '          put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")' \
+            '          put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/REC-Studio")' \
+            '          put(MediaStore.Video.Media.IS_PENDING, 1)' \
+            '        }' \
+            '        val uri = contentResolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)' \
+            '        val opened = uri?.let { contentResolver.openFileDescriptor(it, "w") }' \
+            '        if (uri != null && opened != null) {' \
+            '          pendingUri = uri' \
+            '          pfd = opened' \
+            '          recorder.setOutputFile(opened.fileDescriptor)' \
+            '        } else {' \
+            '          if (uri != null) contentResolver.delete(uri, null, null)' \
+            '          val dir = File(getExternalFilesDir(Environment.DIRECTORY_MOVIES), "REC-Studio").apply { mkdirs() }' \
+            '          val f = File(dir, fileName)' \
+            '          fallbackFile = f' \
+            '          recorder.setOutputFile(f.absolutePath)' \
+            '        }' \
+            '      } else {' \
+            '        @Suppress("DEPRECATION") val pub = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "REC-Studio").apply { mkdirs() }' \
+            '        val f = File(pub, fileName)' \
+            '        fallbackFile = f' \
+            '        recorder.setOutputFile(f.absolutePath)' \
+            '      }' \
             '      recorder.prepare()' \
             '      val mgr = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager' \
             '      val proj = mgr.getMediaProjection(resultCode, data)' \
-            '      if (proj == null) { recorder.release(); stopSelf(); return }' \
+            '      if (proj == null) { cleanupRecorder(); stopSelf(); return }' \
             '      proj.registerCallback(object : MediaProjection.Callback() {' \
             '        override fun onStop() { stopCaptureAndSave() }' \
             '      }, mainHandler)' \
@@ -271,7 +298,7 @@ jobs:
             '      mediaProjection = proj' \
             '      virtualDisplay = vd' \
             '      notifyState(true)' \
-            '      Toast.makeText(this, "Запись экрана началась", Toast.LENGTH_SHORT).show()' \
+            '      Toast.makeText(this, "Запись началась (720p, лёгкий режим)", Toast.LENGTH_SHORT).show()' \
             '    } catch (e: Exception) {' \
             '      cleanupRecorder()' \
             '      notifyState(false)' \
@@ -283,44 +310,27 @@ jobs:
             '    notifyState(false)' \
             '    try { mediaRecorder?.stop() } catch (_: Exception) {}' \
             '    cleanupRecorder()' \
-            '    val file = tempFile' \
-            '    tempFile = null' \
-            '    if (file != null && file.exists() && file.length() > 0L) {' \
-            '      saveToGallery(file)' \
-            '      Toast.makeText(this, "Видео сохранено в Movies/REC-Studio", Toast.LENGTH_LONG).show()' \
-            '    } else {' \
-            '      Toast.makeText(this, "Запись остановлена", Toast.LENGTH_SHORT).show()' \
+            '    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {' \
+            '      pendingUri?.let {' \
+            '        val values = ContentValues().apply { put(MediaStore.Video.Media.IS_PENDING, 0) }' \
+            '        try { contentResolver.update(it, values, null, null) } catch (_: Exception) {}' \
+            '      }' \
             '    }' \
-            '    try { file?.delete() } catch (_: Exception) {}' \
+            '    pendingUri = null' \
+            '    fallbackFile = null' \
+            '    Toast.makeText(this, "Видео сохранено в Movies/REC-Studio", Toast.LENGTH_LONG).show()' \
             '    stopForeground(STOP_FOREGROUND_REMOVE)' \
             '    stopSelf()' \
-            '  }' \
-            '  private fun saveToGallery(src: File) {' \
-            '    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {' \
-            '      val values = ContentValues().apply {' \
-            '        put(MediaStore.Video.Media.DISPLAY_NAME, src.name)' \
-            '        put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")' \
-            '        put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/REC-Studio")' \
-            '        put(MediaStore.Video.Media.IS_PENDING, 1)' \
-            '      }' \
-            '      val uri = contentResolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values) ?: return' \
-            '      contentResolver.openOutputStream(uri)?.use { out -> FileInputStream(src).use { it.copyTo(out) } }' \
-            '      values.clear()' \
-            '      values.put(MediaStore.Video.Media.IS_PENDING, 0)' \
-            '      contentResolver.update(uri, values, null, null)' \
-            '    } else {' \
-            '      @Suppress("DEPRECATION") val pub = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "REC-Studio").apply { mkdirs() }' \
-            '      val dst = File(pub, src.name)' \
-            '      src.copyTo(dst, overwrite = true)' \
-            '    }' \
             '  }' \
             '  private fun cleanupRecorder() {' \
             '    try { virtualDisplay?.release() } catch (_: Exception) {}' \
             '    try { mediaRecorder?.reset() } catch (_: Exception) {}' \
             '    try { mediaRecorder?.release() } catch (_: Exception) {}' \
+            '    try { pfd?.close() } catch (_: Exception) {}' \
             '    try { mediaProjection?.stop() } catch (_: Exception) {}' \
             '    virtualDisplay = null' \
             '    mediaRecorder = null' \
+            '    pfd = null' \
             '    mediaProjection = null' \
             '  }' \
             '  override fun onDestroy() {' \
@@ -400,13 +410,12 @@ jobs:
             '    val recBtn = TextView(this).apply {' \
             '      text = if (ScreenRecordService.isRecording) "■ STOP" else "● REC"' \
             '      setTextColor(Color.parseColor("#FF285C"))' \
-            '      textSize = 12f' \
+            '      textSize = if (ScreenRecordService.isRecording) 11f else 12f' \
             '      setPadding(dp(4), dp(2), dp(8), dp(2))' \
             '      setOnClickListener {' \
             '        if (ScreenRecordService.isRecording) {' \
             '          val stopIntent = Intent(this@OverlayService, ScreenRecordService::class.java).apply { action = ScreenRecordService.ACTION_STOP }' \
             '          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(stopIntent) else startService(stopIntent)' \
-            '          text = "● REC"' \
             '        } else {' \
             '          val reqIntent = Intent(this@OverlayService, MainActivity::class.java).apply {' \
             '            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)' \
@@ -416,14 +425,12 @@ jobs:
             '        }' \
             '      }' \
             '    }' \
-            '    ScreenRecordService.onStateChange = { recording ->' \
-            '      recBtn.text = if (recording) "■ STOP" else "● REC"' \
-            '    }' \
             '    val openBtn = TextView(this).apply {' \
             '      text = "APP"' \
             '      setTextColor(Color.WHITE)' \
             '      textSize = 12f' \
             '      setPadding(dp(6), dp(2), dp(8), dp(2))' \
+            '      visibility = if (ScreenRecordService.isRecording) View.GONE else View.VISIBLE' \
             '      setOnClickListener {' \
             '        val i = Intent(this@OverlayService, MainActivity::class.java).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP) }' \
             '        startActivity(i)' \
@@ -434,8 +441,24 @@ jobs:
             '      setTextColor(Color.parseColor("#9E92BC"))' \
             '      textSize = 14f' \
             '      setPadding(dp(6), dp(2), dp(4), dp(2))' \
+            '      visibility = if (ScreenRecordService.isRecording) View.GONE else View.VISIBLE' \
             '      setOnClickListener { stopSelf() }' \
             '    }' \
+            '    fun applyCompactMode(recording: Boolean) {' \
+            '      recBtn.text = if (recording) "■ STOP" else "● REC"' \
+            '      recBtn.textSize = if (recording) 11f else 12f' \
+            '      recBtn.setPadding(dp(4), dp(1), if (recording) dp(4) else dp(8), dp(1))' \
+            '      openBtn.visibility = if (recording) View.GONE else View.VISIBLE' \
+            '      closeBtn.visibility = if (recording) View.GONE else View.VISIBLE' \
+            '      box.setPadding(if (recording) dp(7) else dp(10), if (recording) dp(4) else dp(6), if (recording) dp(7) else dp(10), if (recording) dp(4) else dp(6))' \
+            '      box.background = GradientDrawable().apply {' \
+            '        setColor(Color.parseColor(if (recording) "#99140D24" else "#CC140D24"))' \
+            '        cornerRadius = dp(18).toFloat()' \
+            '        setStroke(dp(1), Color.parseColor(if (recording) "#88FF285C" else "#556C3EF4"))' \
+            '      }' \
+            '    }' \
+            '    applyCompactMode(ScreenRecordService.isRecording)' \
+            '    ScreenRecordService.onStateChange = { recording -> applyCompactMode(recording) }' \
             '    box.addView(recBtn)' \
             '    box.addView(openBtn)' \
             '    box.addView(closeBtn)' \
