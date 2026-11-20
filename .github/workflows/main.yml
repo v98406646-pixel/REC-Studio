@@ -150,7 +150,7 @@ jobs:
             '      </intent-filter>' \
             '    </activity>' \
             '    <service android:name=".OverlayService" android:exported="false" android:foregroundServiceType="specialUse" />' \
-            '    <service android:name=".ScreenRecordService" android:exported="false" android:foregroundServiceType="mediaProjection" />' \
+            '    <service android:name=".ScreenRecordService" android:exported="false" android:foregroundServiceType="mediaProjection|microphone" />' \
             '  </application>' \
             '</manifest>' > app/src/main/AndroidManifest.xml
 
@@ -160,12 +160,15 @@ jobs:
 
           printf '%s\n' \
             'package com.example.recstudio' \
+            'import android.Manifest' \
             'import android.app.Notification' \
             'import android.app.NotificationChannel' \
             'import android.app.NotificationManager' \
             'import android.app.Service' \
             'import android.content.ContentValues' \
             'import android.content.Intent' \
+            'import android.content.pm.PackageManager' \
+            'import android.content.pm.ServiceInfo' \
             'import android.hardware.display.DisplayManager' \
             'import android.hardware.display.VirtualDisplay' \
             'import android.media.MediaRecorder' \
@@ -182,6 +185,7 @@ jobs:
             'import android.util.DisplayMetrics' \
             'import android.view.WindowManager' \
             'import android.widget.Toast' \
+            'import androidx.core.content.ContextCompat' \
             'import java.io.File' \
             'import java.text.SimpleDateFormat' \
             'import java.util.Date' \
@@ -206,12 +210,13 @@ jobs:
             '  override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {' \
             '    when (intent?.action) {' \
             '      ACTION_START -> {' \
-            '        startForegroundNotif("Запись экрана активна")' \
             '        if (isRecording) return START_STICKY' \
+            '        val hasMicPerm = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED' \
+            '        startForegroundNotif("Запись экрана активна", hasMicPerm)' \
             '        val code = intent.getIntExtra(EXTRA_RESULT_CODE, 0)' \
             '        val data: Intent? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) intent.getParcelableExtra(EXTRA_DATA, Intent::class.java) else @Suppress("DEPRECATION") intent.getParcelableExtra(EXTRA_DATA)' \
             '        if (code != 0 && data != null) {' \
-            '          startCapture(code, data)' \
+            '          startCapture(code, data, hasMicPerm)' \
             '        } else {' \
             '          stopSelf()' \
             '        }' \
@@ -224,7 +229,7 @@ jobs:
             '    isRecording = recording' \
             '    mainHandler.post { onStateChange?.invoke(recording) }' \
             '  }' \
-            '  private fun startForegroundNotif(text: String) {' \
+            '  private fun startForegroundNotif(text: String, withMic: Boolean) {' \
             '    val chId = "rec_studio_record"' \
             '    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {' \
             '      val mgr = getSystemService(NotificationManager::class.java)' \
@@ -233,14 +238,63 @@ jobs:
             '    val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(this, chId) else @Suppress("DEPRECATION") Notification.Builder(this)' \
             '    val n = builder.setContentTitle("REC Studio").setContentText(text).setSmallIcon(android.R.drawable.presence_video_online).build()' \
             '    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {' \
-            '      startForeground(2027, n, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)' \
+            '      val fType = if (withMic) ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION' \
+            '      startForeground(2027, n, fType)' \
             '    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {' \
             '      startForeground(2027, n)' \
             '    } else {' \
             '      @Suppress("DEPRECATION") startForeground(2027, n)' \
             '    }' \
             '  }' \
-            '  private fun startCapture(resultCode: Int, data: Intent) {' \
+            '  private fun prepareOutput(recorder: MediaRecorder, fileName: String) {' \
+            '    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {' \
+            '      val values = ContentValues().apply {' \
+            '        put(MediaStore.Video.Media.DISPLAY_NAME, fileName)' \
+            '        put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")' \
+            '        put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/REC-Studio")' \
+            '        put(MediaStore.Video.Media.IS_PENDING, 1)' \
+            '      }' \
+            '      val uri = contentResolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)' \
+            '      val opened = uri?.let { contentResolver.openFileDescriptor(it, "w") }' \
+            '      if (uri != null && opened != null) {' \
+            '        pendingUri = uri' \
+            '        pfd = opened' \
+            '        recorder.setOutputFile(opened.fileDescriptor)' \
+            '        return' \
+            '      }' \
+            '      if (uri != null) contentResolver.delete(uri, null, null)' \
+            '      val dir = File(getExternalFilesDir(Environment.DIRECTORY_MOVIES), "REC-Studio").apply { mkdirs() }' \
+            '      val f = File(dir, fileName)' \
+            '      fallbackFile = f' \
+            '      recorder.setOutputFile(f.absolutePath)' \
+            '    } else {' \
+            '      @Suppress("DEPRECATION") val pub = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "REC-Studio").apply { mkdirs() }' \
+            '      val f = File(pub, fileName)' \
+            '      fallbackFile = f' \
+            '      recorder.setOutputFile(f.absolutePath)' \
+            '    }' \
+            '  }' \
+            '  private fun buildRecorder(width: Int, height: Int, fileName: String, includeMic: Boolean): MediaRecorder {' \
+            '    val recorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(this) else @Suppress("DEPRECATION") MediaRecorder()' \
+            '    if (includeMic) {' \
+            '      recorder.setAudioSource(MediaRecorder.AudioSource.MIC)' \
+            '    }' \
+            '    recorder.setVideoSource(MediaRecorder.VideoSource.SURFACE)' \
+            '    recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)' \
+            '    if (includeMic) {' \
+            '      recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)' \
+            '      recorder.setAudioSamplingRate(44100)' \
+            '      recorder.setAudioEncodingBitRate(128_000)' \
+            '    }' \
+            '    recorder.setVideoEncoder(MediaRecorder.VideoEncoder.H264)' \
+            '    recorder.setVideoSize(width, height)' \
+            '    recorder.setVideoFrameRate(24)' \
+            '    recorder.setVideoEncodingBitRate(2_500_000)' \
+            '    prepareOutput(recorder, fileName)' \
+            '    recorder.prepare()' \
+            '    return recorder' \
+            '  }' \
+            '  private fun startCapture(resultCode: Int, data: Intent, withMic: Boolean) {' \
             '    try {' \
             '      val wm = getSystemService(WINDOW_SERVICE) as WindowManager' \
             '      val metrics = DisplayMetrics()' \
@@ -252,40 +306,18 @@ jobs:
             '      val height = if (rawW <= rawH) ((rawH.toLong() * targetShort) / rawW).toInt().let { it - (it % 2) } else targetShort' \
             '      val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())' \
             '      val fileName = "REC_$stamp.mp4"' \
-            '      val recorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(this) else @Suppress("DEPRECATION") MediaRecorder()' \
-            '      recorder.setVideoSource(MediaRecorder.VideoSource.SURFACE)' \
-            '      recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)' \
-            '      recorder.setVideoEncoder(MediaRecorder.VideoEncoder.H264)' \
-            '      recorder.setVideoSize(width, height)' \
-            '      recorder.setVideoFrameRate(24)' \
-            '      recorder.setVideoEncodingBitRate(2_500_000)' \
-            '      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {' \
-            '        val values = ContentValues().apply {' \
-            '          put(MediaStore.Video.Media.DISPLAY_NAME, fileName)' \
-            '          put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")' \
-            '          put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/REC-Studio")' \
-            '          put(MediaStore.Video.Media.IS_PENDING, 1)' \
-            '        }' \
-            '        val uri = contentResolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)' \
-            '        val opened = uri?.let { contentResolver.openFileDescriptor(it, "w") }' \
-            '        if (uri != null && opened != null) {' \
-            '          pendingUri = uri' \
-            '          pfd = opened' \
-            '          recorder.setOutputFile(opened.fileDescriptor)' \
+            '      var micEnabled = withMic' \
+            '      val recorder = try {' \
+            '        buildRecorder(width, height, fileName, withMic)' \
+            '      } catch (_: Exception) {' \
+            '        if (withMic) {' \
+            '          cleanupOutput()' \
+            '          micEnabled = false' \
+            '          buildRecorder(width, height, fileName, false)' \
             '        } else {' \
-            '          if (uri != null) contentResolver.delete(uri, null, null)' \
-            '          val dir = File(getExternalFilesDir(Environment.DIRECTORY_MOVIES), "REC-Studio").apply { mkdirs() }' \
-            '          val f = File(dir, fileName)' \
-            '          fallbackFile = f' \
-            '          recorder.setOutputFile(f.absolutePath)' \
+            '          throw IllegalStateException("Не удалось подготовить запись")' \
             '        }' \
-            '      } else {' \
-            '        @Suppress("DEPRECATION") val pub = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "REC-Studio").apply { mkdirs() }' \
-            '        val f = File(pub, fileName)' \
-            '        fallbackFile = f' \
-            '        recorder.setOutputFile(f.absolutePath)' \
             '      }' \
-            '      recorder.prepare()' \
             '      val mgr = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager' \
             '      val proj = mgr.getMediaProjection(resultCode, data)' \
             '      if (proj == null) { cleanupRecorder(); stopSelf(); return }' \
@@ -298,7 +330,8 @@ jobs:
             '      mediaProjection = proj' \
             '      virtualDisplay = vd' \
             '      notifyState(true)' \
-            '      Toast.makeText(this, "Запись началась (720p, лёгкий режим)", Toast.LENGTH_SHORT).show()' \
+            '      val msg = if (micEnabled) "Запись началась (720p + микрофон)" else "Запись началась (720p, без звука)"' \
+            '      Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()' \
             '    } catch (e: Exception) {' \
             '      cleanupRecorder()' \
             '      notifyState(false)' \
@@ -321,6 +354,16 @@ jobs:
             '    Toast.makeText(this, "Видео сохранено в Movies/REC-Studio", Toast.LENGTH_LONG).show()' \
             '    stopForeground(STOP_FOREGROUND_REMOVE)' \
             '    stopSelf()' \
+            '  }' \
+            '  private fun cleanupOutput() {' \
+            '    try { pfd?.close() } catch (_: Exception) {}' \
+            '    pfd = null' \
+            '    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {' \
+            '      pendingUri?.let { try { contentResolver.delete(it, null, null) } catch (_: Exception) {} }' \
+            '    }' \
+            '    pendingUri = null' \
+            '    try { fallbackFile?.delete() } catch (_: Exception) {}' \
+            '    fallbackFile = null' \
             '  }' \
             '  private fun cleanupRecorder() {' \
             '    try { virtualDisplay?.release() } catch (_: Exception) {}' \
