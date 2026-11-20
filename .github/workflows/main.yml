@@ -194,7 +194,37 @@ jobs:
             '  }' \
             '}' > app/src/main/java/com/example/recstudio/MainActivity.kt
 
-          python3 -c "import os, shutil, struct, zlib; cands=['icon.png','Icon.png']+[os.path.join(r,f) for r,_,fs in os.walk('.') if '.git' not in r and 'app/build' not in r for f in fs if f.lower()=='icon.png']; src=next((p for p in cands if os.path.isfile(p) and os.path.getsize(p)>0), None); def chunk(t,d): return struct.pack('!I',len(d))+t+d+struct.pack('!I',zlib.crc32(t+d)&0xffffffff); def make_png(): raw=b''.join(b'\x00'+b'\xdc\x26\x26\xff'*16 for _ in range(16)); return b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('!IIBBBBB',16,16,8,6,0,0,0))+chunk(b'IDAT',zlib.compress(raw))+chunk(b'IEND',b''); fb=make_png(); dirs=['mipmap-mdpi','mipmap-hdpi','mipmap-xhdpi','mipmap-xxhdpi','mipmap-xxxhdpi']; [ (os.makedirs(os.path.join('app/src/main/res',d),exist_ok=True), shutil.copyfile(src,os.path.join('app/src/main/res',d,'ic_launcher.png')) if src else open(os.path.join('app/src/main/res',d,'ic_launcher.png'),'wb').write(fb), shutil.copyfile(src,os.path.join('app/src/main/res',d,'ic_launcher_round.png')) if src else open(os.path.join('app/src/main/res',d,'ic_launcher_round.png'),'wb').write(fb)) for d in dirs ]"
+          printf '%s\n' \
+            'import os, shutil, struct, zlib' \
+            'cands = ["icon.png", "Icon.png"]' \
+            'for r, _, fs in os.walk("."):' \
+            '    if ".git" in r or "app/build" in r:' \
+            '        continue' \
+            '    for f in fs:' \
+            '        if f.lower() == "icon.png":' \
+            '            cands.append(os.path.join(r, f))' \
+            'src = None' \
+            'for p in cands:' \
+            '    if os.path.isfile(p) and os.path.getsize(p) > 0:' \
+            '        src = p' \
+            '        break' \
+            'def chunk(t, d):' \
+            '    return struct.pack("!I", len(d)) + t + d + struct.pack("!I", zlib.crc32(t + d) & 0xffffffff)' \
+            'raw = b"".join(b"\x00" + b"\xdc\x26\x26\xff" * 16 for _ in range(16))' \
+            'fb = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack("!IIBBBBB", 16, 16, 8, 6, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b"")' \
+            'dirs = ["mipmap-mdpi", "mipmap-hdpi", "mipmap-xhdpi", "mipmap-xxhdpi", "mipmap-xxxhdpi"]' \
+            'for d in dirs:' \
+            '    out_dir = os.path.join("app/src/main/res", d)' \
+            '    os.makedirs(out_dir, exist_ok=True)' \
+            '    for name in ("ic_launcher.png", "ic_launcher_round.png"):' \
+            '        dst = os.path.join(out_dir, name)' \
+            '        if src:' \
+            '            shutil.copyfile(src, dst)' \
+            '        else:' \
+            '            with open(dst, "wb") as fp:' \
+            '                fp.write(fb)' > make_icons.py
+
+          python3 make_icons.py
 
       - name: Build REC Studio APK
         run: |
