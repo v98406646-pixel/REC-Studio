@@ -163,13 +163,9 @@ jobs:
             'import android.app.Notification' \
             'import android.app.NotificationChannel' \
             'import android.app.NotificationManager' \
-            'import android.app.PendingIntent' \
             'import android.app.Service' \
             'import android.content.ContentValues' \
             'import android.content.Intent' \
-            'import android.graphics.Color' \
-            'import android.graphics.PixelFormat' \
-            'import android.graphics.drawable.GradientDrawable' \
             'import android.hardware.display.DisplayManager' \
             'import android.hardware.display.VirtualDisplay' \
             'import android.media.MediaRecorder' \
@@ -180,12 +176,7 @@ jobs:
             'import android.os.IBinder' \
             'import android.provider.MediaStore' \
             'import android.util.DisplayMetrics' \
-            'import android.view.Gravity' \
-            'import android.view.MotionEvent' \
-            'import android.view.View' \
             'import android.view.WindowManager' \
-            'import android.widget.LinearLayout' \
-            'import android.widget.TextView' \
             'import android.widget.Toast' \
             'import java.io.File' \
             'import java.io.FileInputStream' \
@@ -200,10 +191,10 @@ jobs:
             '    const val EXTRA_DATA = "data"' \
             '    @Volatile var isRecording = false' \
             '  }' \
-            '  private var mediaProjection: MediaProjection?' \
-            '  private var virtualDisplay: VirtualDisplay?' \
-            '  private var mediaRecorder: MediaRecorder?' \
-            '  private var tempFile: File?' \
+            '  private var mediaProjection: MediaProjection? = null' \
+            '  private var virtualDisplay: VirtualDisplay? = null' \
+            '  private var mediaRecorder: MediaRecorder? = null' \
+            '  private var tempFile: File? = null' \
             '  override fun onBind(intent: Intent?): IBinder? = null' \
             '  override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {' \
             '    when (intent?.action) {' \
@@ -486,7 +477,7 @@ jobs:
             'import java.io.File' \
             'class MainActivity : AppCompatActivity() {' \
             '  private val reqCaptureCode = 2048' \
-            '  private var webViewRef: WebView?' \
+            '  private var webViewRef: WebView? = null' \
             '  inner class NativeBridge {' \
             '    @JavascriptInterface fun startScreenRecord() { runOnUiThread { promptScreenCapture() } }' \
             '    @JavascriptInterface fun stopScreenRecord() { runOnUiThread { stopScreenCapture() } }' \
