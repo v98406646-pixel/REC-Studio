@@ -1,9 +1,53 @@
-cd /путь/к/репозиторию
-bash setup_rec_studio_v2.sh
-sed -i 's|ВАШ_НИК/ВАШ_РЕПОЗИТОРИЙ|НИК/РЕПОЗИТОРИЙ|g' app/src/main/java/com/example/recstudio/MainActivity.kt
-git add .
-git commit -m "Build REC Studio APK"
-git branch -M main
-git push -u origin main
-gh run list --limit 5
-gh run download --name rec-studio-apk
+name: Build REC Studio APK
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: "temurin"
+          cache: "gradle"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Apply custom icon if present
+        run: |
+          if [ -f "Icon.png" ]; then
+            for d in mipmap-mdpi mipmap-hdpi mipmap-xhdpi mipmap-xxhdpi mipmap-xxxhdpi; do
+              mkdir -p "app/src/main/res/$d"
+              cp "Icon.png" "app/src/main/res/$d/ic_launcher.png"
+              cp "Icon.png" "app/src/main/res/$d/ic_launcher_round.png"
+            done
+          fi
+
+      - name: Build Debug APK
+        run: |
+          chmod +x ./gradlew || true
+          if [ -f "./gradlew" ]; then
+            ./gradlew assembleDebug --stacktrace
+          else
+            gradle assembleDebug --stacktrace
+          fi
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rec-studio-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
