@@ -36,7 +36,24 @@ jobs:
           yes | "$SDK_DIR/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$SDK_DIR" --licenses >/dev/null || true
           "$SDK_DIR/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$SDK_DIR" "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
-          mkdir -p app/src/main/java/com/example/recstudio app/src/main/res/values
+          mkdir -p app/src/main/java/com/example/recstudio app/src/main/res/values app/src/main/assets
+
+          HTML_SRC=""
+          for candidate in index.html src/index.html public/index.html www/index.html; do
+            if [ -f "$candidate" ] && [ -s "$candidate" ]; then
+              HTML_SRC="$candidate"
+              break
+            fi
+          done
+          if [ -z "$HTML_SRC" ]; then
+            FOUND_HTML=$(find . -maxdepth 3 -name "index.html" ! -path "./app/*" ! -path "./.git/*" -size +0c | head -n 1 || true)
+            if [ -n "$FOUND_HTML" ]; then
+              HTML_SRC="$FOUND_HTML"
+            fi
+          fi
+          if [ -n "$HTML_SRC" ]; then
+            cp "$HTML_SRC" app/src/main/assets/index.html
+          fi
 
           printf '%s\n' \
             'pluginManagement {' \
@@ -146,6 +163,9 @@ jobs:
             'import android.provider.Settings' \
             'import android.webkit.PermissionRequest' \
             'import android.webkit.WebChromeClient' \
+            'import android.webkit.WebResourceError' \
+            'import android.webkit.WebResourceRequest' \
+            'import android.webkit.WebSettings' \
             'import android.webkit.WebView' \
             'import android.webkit.WebViewClient' \
             'import androidx.appcompat.app.AppCompatActivity' \
@@ -161,7 +181,16 @@ jobs:
             '    webView.settings.mediaPlaybackRequiresUserGesture = false' \
             '    webView.settings.allowFileAccess = true' \
             '    webView.settings.allowContentAccess = true' \
-            '    webView.webViewClient = WebViewClient()' \
+            '    webView.settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW' \
+            '    webView.webViewClient = object : WebViewClient() {' \
+            '      override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {' \
+            '        if (request?.isForMainFrame == true) {' \
+            '          val msg = error?.description?.toString() ?: "Ошибка загрузки"' \
+            '          val html = "<html><body style=\"background:#111;color:#fff;font-family:sans-serif;padding:24px\"><h2>REC Studio</h2><p>Не удалось загрузить интерфейс: $msg</p><button onclick=\"location.reload()\" style=\"padding:12px 18px;font-size:16px\">Обновить</button></body></html>"' \
+            '          view?.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)' \
+            '        }' \
+            '      }' \
+            '    }' \
             '    webView.webChromeClient = object : WebChromeClient() {' \
             '      override fun onPermissionRequest(request: PermissionRequest) {' \
             '        runOnUiThread { request.grant(request.resources) }' \
@@ -170,10 +199,11 @@ jobs:
             '    setContentView(webView)' \
             '    requestAppPermissions()' \
             '    val localIndex = File(filesDir, "index.html")' \
-            '    if (localIndex.exists()) {' \
-            '      webView.loadUrl("file://" + localIndex.absolutePath)' \
-            '    } else {' \
-            '      webView.loadUrl("https://raw.githubusercontent.com/v98406646-pixel/REC-Studio/main/index.html")' \
+            '    val assetExists = try { assets.open("index.html").use { true } } catch (_: Exception) { false }' \
+            '    when {' \
+            '      localIndex.exists() && localIndex.length() > 0L -> webView.loadUrl("file://" + localIndex.absolutePath)' \
+            '      assetExists -> webView.loadUrl("file:///android_asset/index.html")' \
+            '      else -> webView.loadUrl("https://raw.githubusercontent.com/v98406646-pixel/REC-Studio/main/index.html")' \
             '    }' \
             '  }' \
             '  private fun requestAppPermissions() {' \
