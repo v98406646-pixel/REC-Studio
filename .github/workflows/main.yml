@@ -150,12 +150,186 @@ jobs:
             '      </intent-filter>' \
             '    </activity>' \
             '    <service android:name=".OverlayService" android:exported="false" android:foregroundServiceType="specialUse" />' \
+            '    <service android:name=".ScreenRecordService" android:exported="false" android:foregroundServiceType="mediaProjection" />' \
             '  </application>' \
             '</manifest>' > app/src/main/AndroidManifest.xml
 
           printf '%s\n' \
             '<?xml version="1.0" encoding="utf-8"?>' \
             '<resources><string name="app_name">REC Studio</string></resources>' > app/src/main/res/values/strings.xml
+
+          printf '%s\n' \
+            'package com.example.recstudio' \
+            'import android.app.Notification' \
+            'import android.app.NotificationChannel' \
+            'import android.app.NotificationManager' \
+            'import android.app.PendingIntent' \
+            'import android.app.Service' \
+            'import android.content.ContentValues' \
+            'import android.content.Intent' \
+            'import android.graphics.Color' \
+            'import android.graphics.PixelFormat' \
+            'import android.graphics.drawable.GradientDrawable' \
+            'import android.hardware.display.DisplayManager' \
+            'import android.hardware.display.VirtualDisplay' \
+            'import android.media.MediaRecorder' \
+            'import android.media.projection.MediaProjection' \
+            'import android.media.projection.MediaProjectionManager' \
+            'import android.os.Build' \
+            'import android.os.Environment' \
+            'import android.os.IBinder' \
+            'import android.provider.MediaStore' \
+            'import android.util.DisplayMetrics' \
+            'import android.view.Gravity' \
+            'import android.view.MotionEvent' \
+            'import android.view.View' \
+            'import android.view.WindowManager' \
+            'import android.widget.LinearLayout' \
+            'import android.widget.TextView' \
+            'import android.widget.Toast' \
+            'import java.io.File' \
+            'import java.io.FileInputStream' \
+            'import java.text.SimpleDateFormat' \
+            'import java.util.Date' \
+            'import java.util.Locale' \
+            'class ScreenRecordService : Service() {' \
+            '  companion object {' \
+            '    const val ACTION_START = "com.example.recstudio.action.START_RECORD"' \
+            '    const val ACTION_STOP = "com.example.recstudio.action.STOP_RECORD"' \
+            '    const val EXTRA_RESULT_CODE = "result_code"' \
+            '    const val EXTRA_DATA = "data"' \
+            '    @Volatile var isRecording = false' \
+            '  }' \
+            '  private var mediaProjection: MediaProjection?' \
+            '  private var virtualDisplay: VirtualDisplay?' \
+            '  private var mediaRecorder: MediaRecorder?' \
+            '  private var tempFile: File?' \
+            '  override fun onBind(intent: Intent?): IBinder? = null' \
+            '  override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {' \
+            '    when (intent?.action) {' \
+            '      ACTION_START -> {' \
+            '        if (isRecording) return START_STICKY' \
+            '        startForegroundNotif("Запись экрана активна")' \
+            '        val code = intent.getIntExtra(EXTRA_RESULT_CODE, 0)' \
+            '        val data: Intent? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) intent.getParcelableExtra(EXTRA_DATA, Intent::class.java) else @Suppress("DEPRECATION") intent.getParcelableExtra(EXTRA_DATA)' \
+            '        if (code != 0 && data != null) {' \
+            '          startCapture(code, data)' \
+            '        } else {' \
+            '          stopSelf()' \
+            '        }' \
+            '      }' \
+            '      ACTION_STOP -> stopCaptureAndSave()' \
+            '    }' \
+            '    return START_STICKY' \
+            '  }' \
+            '  private fun startForegroundNotif(text: String) {' \
+            '    val chId = "rec_studio_record"' \
+            '    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {' \
+            '      val mgr = getSystemService(NotificationManager::class.java)' \
+            '      mgr?.createNotificationChannel(NotificationChannel(chId, "REC Studio Recording", NotificationManager.IMPORTANCE_LOW))' \
+            '    }' \
+            '    val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(this, chId) else @Suppress("DEPRECATION") Notification.Builder(this)' \
+            '    val n = builder.setContentTitle("REC Studio").setContentText(text).setSmallIcon(android.R.drawable.presence_video_online).build()' \
+            '    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {' \
+            '      startForeground(2027, n, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)' \
+            '    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {' \
+            '      startForeground(2027, n)' \
+            '    } else {' \
+            '      @Suppress("DEPRECATION") startForeground(2027, n)' \
+            '    }' \
+            '  }' \
+            '  private fun startCapture(resultCode: Int, data: Intent) {' \
+            '    try {' \
+            '      val wm = getSystemService(WINDOW_SERVICE) as WindowManager' \
+            '      val metrics = DisplayMetrics()' \
+            '      @Suppress("DEPRECATION") wm.defaultDisplay.getRealMetrics(metrics)' \
+            '      val rawW = metrics.widthPixels.coerceAtLeast(720)' \
+            '      val rawH = metrics.heightPixels.coerceAtLeast(1280)' \
+            '      val width = if (rawW > 1080) 1080 else rawW - (rawW % 2)' \
+            '      val height = if (rawW > 1080) ((rawH.toLong() * 1080L) / rawW).toInt().let { it - (it % 2) } else rawH - (rawH % 2)' \
+            '      val outDir = File(cacheDir, "records").apply { mkdirs() }' \
+            '      val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())' \
+            '      val file = File(outDir, "REC_$stamp.mp4")' \
+            '      tempFile = file' \
+            '      val recorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(this) else @Suppress("DEPRECATION") MediaRecorder()' \
+            '      recorder.setVideoSource(MediaRecorder.VideoSource.SURFACE)' \
+            '      recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)' \
+            '      recorder.setVideoEncoder(MediaRecorder.VideoEncoder.H264)' \
+            '      recorder.setVideoSize(width, height)' \
+            '      recorder.setVideoFrameRate(30)' \
+            '      recorder.setVideoEncodingBitRate(6_000_000)' \
+            '      recorder.setOutputFile(file.absolutePath)' \
+            '      recorder.prepare()' \
+            '      val mgr = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager' \
+            '      val proj = mgr.getMediaProjection(resultCode, data)' \
+            '      if (proj == null) { recorder.release(); stopSelf(); return }' \
+            '      proj.registerCallback(object : MediaProjection.Callback() {' \
+            '        override fun onStop() { stopCaptureAndSave() }' \
+            '      }, null)' \
+            '      val vd = proj.createVirtualDisplay("RECStudioDisplay", width, height, metrics.densityDpi, DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, recorder.surface, null, null)' \
+            '      recorder.start()' \
+            '      mediaRecorder = recorder' \
+            '      mediaProjection = proj' \
+            '      virtualDisplay = vd' \
+            '      isRecording = true' \
+            '      Toast.makeText(this, "Запись экрана началась", Toast.LENGTH_SHORT).show()' \
+            '    } catch (e: Exception) {' \
+            '      cleanupRecorder()' \
+            '      isRecording = false' \
+            '      Toast.makeText(this, "Ошибка записи: ${e.localizedMessage}", Toast.LENGTH_LONG).show()' \
+            '      stopSelf()' \
+            '    }' \
+            '  }' \
+            '  private fun stopCaptureAndSave() {' \
+            '    isRecording = false' \
+            '    try { mediaRecorder?.stop() } catch (_: Exception) {}' \
+            '    cleanupRecorder()' \
+            '    val file = tempFile' \
+            '    tempFile = null' \
+            '    if (file != null && file.exists() && file.length() > 0L) {' \
+            '      saveToGallery(file)' \
+            '      Toast.makeText(this, "Видео сохранено в Movies/REC-Studio", Toast.LENGTH_LONG).show()' \
+            '    } else {' \
+            '      Toast.makeText(this, "Запись остановлена", Toast.LENGTH_SHORT).show()' \
+            '    }' \
+            '    try { file?.delete() } catch (_: Exception) {}' \
+            '    stopForeground(STOP_FOREGROUND_REMOVE)' \
+            '    stopSelf()' \
+            '  }' \
+            '  private fun saveToGallery(src: File) {' \
+            '    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {' \
+            '      val values = ContentValues().apply {' \
+            '        put(MediaStore.Video.Media.DISPLAY_NAME, src.name)' \
+            '        put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")' \
+            '        put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/REC-Studio")' \
+            '        put(MediaStore.Video.Media.IS_PENDING, 1)' \
+            '      }' \
+            '      val uri = contentResolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values) ?: return' \
+            '      contentResolver.openOutputStream(uri)?.use { out -> FileInputStream(src).use { it.copyTo(out) } }' \
+            '      values.clear()' \
+            '      values.put(MediaStore.Video.Media.IS_PENDING, 0)' \
+            '      contentResolver.update(uri, values, null, null)' \
+            '    } else {' \
+            '      @Suppress("DEPRECATION") val pub = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "REC-Studio").apply { mkdirs() }' \
+            '      val dst = File(pub, src.name)' \
+            '      src.copyTo(dst, overwrite = true)' \
+            '    }' \
+            '  }' \
+            '  private fun cleanupRecorder() {' \
+            '    try { virtualDisplay?.release() } catch (_: Exception) {}' \
+            '    try { mediaRecorder?.reset() } catch (_: Exception) {}' \
+            '    try { mediaRecorder?.release() } catch (_: Exception) {}' \
+            '    try { mediaProjection?.stop() } catch (_: Exception) {}' \
+            '    virtualDisplay = null' \
+            '    mediaRecorder = null' \
+            '    mediaProjection = null' \
+            '  }' \
+            '  override fun onDestroy() {' \
+            '    isRecording = false' \
+            '    cleanupRecorder()' \
+            '    super.onDestroy()' \
+            '  }' \
+            '}' > app/src/main/java/com/example/recstudio/ScreenRecordService.kt
 
           printf '%s\n' \
             'package com.example.recstudio' \
@@ -224,8 +398,27 @@ jobs:
             '        setStroke(dp(1), Color.parseColor("#556C3EF4"))' \
             '      }' \
             '    }' \
+            '    val recBtn = TextView(this).apply {' \
+            '      text = "● REC"' \
+            '      setTextColor(Color.parseColor("#FF285C"))' \
+            '      textSize = 12f' \
+            '      setPadding(dp(4), dp(2), dp(8), dp(2))' \
+            '      setOnClickListener {' \
+            '        if (ScreenRecordService.isRecording) {' \
+            '          val stopIntent = Intent(this@OverlayService, ScreenRecordService::class.java).apply { action = ScreenRecordService.ACTION_STOP }' \
+            '          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(stopIntent) else startService(stopIntent)' \
+            '          text = "● REC"' \
+            '        } else {' \
+            '          val reqIntent = Intent(this@OverlayService, MainActivity::class.java).apply {' \
+            '            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)' \
+            '            putExtra("request_record", true)' \
+            '          }' \
+            '          startActivity(reqIntent)' \
+            '        }' \
+            '      }' \
+            '    }' \
             '    val openBtn = TextView(this).apply {' \
-            '      text = "REC"' \
+            '      text = "APP"' \
             '      setTextColor(Color.WHITE)' \
             '      textSize = 12f' \
             '      setPadding(dp(6), dp(2), dp(8), dp(2))' \
@@ -236,11 +429,12 @@ jobs:
             '    }' \
             '    val closeBtn = TextView(this).apply {' \
             '      text = "×"' \
-            '      setTextColor(Color.parseColor("#FF285C"))' \
+            '      setTextColor(Color.parseColor("#9E92BC"))' \
             '      textSize = 14f' \
             '      setPadding(dp(6), dp(2), dp(4), dp(2))' \
             '      setOnClickListener { stopSelf() }' \
             '    }' \
+            '    box.addView(recBtn)' \
             '    box.addView(openBtn)' \
             '    box.addView(closeBtn)' \
             '    var initX = 0; var initY = 0; var touchX = 0f; var touchY = 0f' \
@@ -270,12 +464,15 @@ jobs:
           printf '%s\n' \
             'package com.example.recstudio' \
             'import android.Manifest' \
+            'import android.app.Activity' \
             'import android.content.Intent' \
             'import android.content.pm.PackageManager' \
+            'import android.media.projection.MediaProjectionManager' \
             'import android.net.Uri' \
             'import android.os.Build' \
             'import android.os.Bundle' \
             'import android.provider.Settings' \
+            'import android.webkit.JavascriptInterface' \
             'import android.webkit.PermissionRequest' \
             'import android.webkit.WebChromeClient' \
             'import android.webkit.WebResourceError' \
@@ -288,15 +485,24 @@ jobs:
             'import androidx.core.content.ContextCompat' \
             'import java.io.File' \
             'class MainActivity : AppCompatActivity() {' \
+            '  private val reqCaptureCode = 2048' \
+            '  private var webViewRef: WebView?' \
+            '  inner class NativeBridge {' \
+            '    @JavascriptInterface fun startScreenRecord() { runOnUiThread { promptScreenCapture() } }' \
+            '    @JavascriptInterface fun stopScreenRecord() { runOnUiThread { stopScreenCapture() } }' \
+            '    @JavascriptInterface fun isRecording(): Boolean = ScreenRecordService.isRecording' \
+            '  }' \
             '  override fun onCreate(savedInstanceState: Bundle?) {' \
             '    super.onCreate(savedInstanceState)' \
             '    val webView = WebView(this)' \
+            '    webViewRef = webView' \
             '    webView.settings.javaScriptEnabled = true' \
             '    webView.settings.domStorageEnabled = true' \
             '    webView.settings.mediaPlaybackRequiresUserGesture = false' \
             '    webView.settings.allowFileAccess = true' \
             '    webView.settings.allowContentAccess = true' \
             '    webView.settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW' \
+            '    webView.addJavascriptInterface(NativeBridge(), "AndroidBridge")' \
             '    webView.webViewClient = object : WebViewClient() {' \
             '      override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {' \
             '        if (request?.isForMainFrame == true) {' \
@@ -323,6 +529,32 @@ jobs:
             '        val fallbackHtml = "<html><body style=\"background:#111;color:#fff;font-family:sans-serif;padding:24px\"><h2>REC Studio</h2><p>Файл index.html не найден в репозитории и в APK.</p><p>Загрузите <b>index.html</b> в корень ветки <b>main</b> репозитория <b>REC-Studio</b> и пересоберите приложение.</p></body></html>"' \
             '        webView.loadDataWithBaseURL(null, fallbackHtml, "text/html", "UTF-8", null)' \
             '      }' \
+            '    }' \
+            '    if (intent?.getBooleanExtra("request_record", false) == true) { promptScreenCapture() }' \
+            '  }' \
+            '  override fun onNewIntent(intent: Intent?) {' \
+            '    super.onNewIntent(intent)' \
+            '    if (intent?.getBooleanExtra("request_record", false) == true) { promptScreenCapture() }' \
+            '  }' \
+            '  private fun promptScreenCapture() {' \
+            '    if (ScreenRecordService.isRecording) { stopScreenCapture(); return }' \
+            '    val mgr = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager' \
+            '    startActivityForResult(mgr.createScreenCaptureIntent(), reqCaptureCode)' \
+            '  }' \
+            '  private fun stopScreenCapture() {' \
+            '    val i = Intent(this, ScreenRecordService::class.java).apply { action = ScreenRecordService.ACTION_STOP }' \
+            '    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i) else startService(i)' \
+            '  }' \
+            '  @Deprecated("Deprecated in Java")' \
+            '  override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {' \
+            '    @Suppress("DEPRECATION") super.onActivityResult(requestCode, resultCode, data)' \
+            '    if (requestCode == reqCaptureCode && resultCode == Activity.RESULT_OK && data != null) {' \
+            '      val i = Intent(this, ScreenRecordService::class.java).apply {' \
+            '        action = ScreenRecordService.ACTION_START' \
+            '        putExtra(ScreenRecordService.EXTRA_RESULT_CODE, resultCode)' \
+            '        putExtra(ScreenRecordService.EXTRA_DATA, data)' \
+            '      }' \
+            '      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i) else startService(i)' \
             '    }' \
             '  }' \
             '  override fun onResume() {' \
