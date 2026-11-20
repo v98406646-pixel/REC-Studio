@@ -251,22 +251,49 @@ jobs:
           }
           EOF
 
-          if [ -f "Icon.png" ]; then
-            python3 -c '
-          import os
-          from PIL import Image
-          try:
-              img = Image.open("Icon.png").convert("RGBA")
-              for d, px in {"mipmap-mdpi":48,"mipmap-hdpi":72,"mipmap-xhdpi":96,"mipmap-xxhdpi":144,"mipmap-xxxhdpi":192}.items():
-                  p = os.path.join("app/src/main/res", d)
-                  os.makedirs(p, exist_ok=True)
-                  im = img.resize((px, px), Image.Resampling.LANCZOS)
-                  im.save(os.path.join(p, "ic_launcher.png"), "PNG")
-                  im.save(os.path.join(p, "ic_launcher_round.png"), "PNG")
-          except Exception:
-              pass
-          '
-          fi
+          python3 - <<'PY'
+import os
+from PIL import Image, ImageDraw
+
+sizes = {
+    "mipmap-mdpi": 48,
+    "mipmap-hdpi": 72,
+    "mipmap-xhdpi": 96,
+    "mipmap-xxhdpi": 144,
+    "mipmap-xxxhdpi": 192,
+}
+
+candidates = ["icon.png", "Icon.png"]
+for root, _, files in os.walk("."):
+    if ".git" in root or "app/build" in root:
+        continue
+    for f in files:
+        if f.lower() == "icon.png":
+            candidates.append(os.path.join(root, f))
+
+img = None
+for path in candidates:
+    if os.path.isfile(path):
+        try:
+            img = Image.open(path).convert("RGBA")
+            img.load()
+            break
+        except Exception:
+            img = None
+
+for folder, px in sizes.items():
+    out_dir = os.path.join("app/src/main/res", folder)
+    os.makedirs(out_dir, exist_ok=True)
+    if img is not None:
+        icon = img.resize((px, px), Image.Resampling.LANCZOS)
+    else:
+        icon = Image.new("RGBA", (px, px), (220, 38, 38, 255))
+        draw = ImageDraw.Draw(icon)
+        pad = max(2, px // 4)
+        draw.ellipse((pad, pad, px - pad, px - pad), fill=(255, 255, 255, 255))
+    icon.save(os.path.join(out_dir, "ic_launcher.png"), format="PNG")
+    icon.save(os.path.join(out_dir, "ic_launcher_round.png"), format="PNG")
+PY
 
       - name: Build REC Studio APK
         run: |
