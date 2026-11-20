@@ -143,7 +143,7 @@ jobs:
             '  <uses-feature android:name="android.hardware.camera" android:required="false" />' \
             '  <uses-feature android:name="android.hardware.microphone" android:required="false" />' \
             '  <application android:allowBackup="true" android:label="REC Studio" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" android:supportsRtl="true" android:theme="@style/Theme.AppCompat.Light.NoActionBar">' \
-            '    <activity android:name=".MainActivity" android:exported="true" android:configChanges="orientation|screenSize|keyboardHidden">' \
+            '    <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTask" android:configChanges="orientation|screenSize|keyboardHidden">' \
             '      <intent-filter>' \
             '        <action android:name="android.intent.action.MAIN" />' \
             '        <category android:name="android.intent.category.LAUNCHER" />' \
@@ -173,7 +173,9 @@ jobs:
             'import android.media.projection.MediaProjectionManager' \
             'import android.os.Build' \
             'import android.os.Environment' \
+            'import android.os.Handler' \
             'import android.os.IBinder' \
+            'import android.os.Looper' \
             'import android.provider.MediaStore' \
             'import android.util.DisplayMetrics' \
             'import android.view.WindowManager' \
@@ -190,17 +192,19 @@ jobs:
             '    const val EXTRA_RESULT_CODE = "result_code"' \
             '    const val EXTRA_DATA = "data"' \
             '    @Volatile var isRecording = false' \
+            '    var onStateChange: ((Boolean) -> Unit)? = null' \
             '  }' \
             '  private var mediaProjection: MediaProjection? = null' \
             '  private var virtualDisplay: VirtualDisplay? = null' \
             '  private var mediaRecorder: MediaRecorder? = null' \
             '  private var tempFile: File? = null' \
+            '  private val mainHandler = Handler(Looper.getMainLooper())' \
             '  override fun onBind(intent: Intent?): IBinder? = null' \
             '  override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {' \
             '    when (intent?.action) {' \
             '      ACTION_START -> {' \
-            '        if (isRecording) return START_STICKY' \
             '        startForegroundNotif("Запись экрана активна")' \
+            '        if (isRecording) return START_STICKY' \
             '        val code = intent.getIntExtra(EXTRA_RESULT_CODE, 0)' \
             '        val data: Intent? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) intent.getParcelableExtra(EXTRA_DATA, Intent::class.java) else @Suppress("DEPRECATION") intent.getParcelableExtra(EXTRA_DATA)' \
             '        if (code != 0 && data != null) {' \
@@ -212,6 +216,10 @@ jobs:
             '      ACTION_STOP -> stopCaptureAndSave()' \
             '    }' \
             '    return START_STICKY' \
+            '  }' \
+            '  private fun notifyState(recording: Boolean) {' \
+            '    isRecording = recording' \
+            '    mainHandler.post { onStateChange?.invoke(recording) }' \
             '  }' \
             '  private fun startForegroundNotif(text: String) {' \
             '    val chId = "rec_studio_record"' \
@@ -256,23 +264,23 @@ jobs:
             '      if (proj == null) { recorder.release(); stopSelf(); return }' \
             '      proj.registerCallback(object : MediaProjection.Callback() {' \
             '        override fun onStop() { stopCaptureAndSave() }' \
-            '      }, null)' \
+            '      }, mainHandler)' \
             '      val vd = proj.createVirtualDisplay("RECStudioDisplay", width, height, metrics.densityDpi, DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, recorder.surface, null, null)' \
             '      recorder.start()' \
             '      mediaRecorder = recorder' \
             '      mediaProjection = proj' \
             '      virtualDisplay = vd' \
-            '      isRecording = true' \
+            '      notifyState(true)' \
             '      Toast.makeText(this, "Запись экрана началась", Toast.LENGTH_SHORT).show()' \
             '    } catch (e: Exception) {' \
             '      cleanupRecorder()' \
-            '      isRecording = false' \
+            '      notifyState(false)' \
             '      Toast.makeText(this, "Ошибка записи: ${e.localizedMessage}", Toast.LENGTH_LONG).show()' \
             '      stopSelf()' \
             '    }' \
             '  }' \
             '  private fun stopCaptureAndSave() {' \
-            '    isRecording = false' \
+            '    notifyState(false)' \
             '    try { mediaRecorder?.stop() } catch (_: Exception) {}' \
             '    cleanupRecorder()' \
             '    val file = tempFile' \
@@ -316,7 +324,7 @@ jobs:
             '    mediaProjection = null' \
             '  }' \
             '  override fun onDestroy() {' \
-            '    isRecording = false' \
+            '    notifyState(false)' \
             '    cleanupRecorder()' \
             '    super.onDestroy()' \
             '  }' \
@@ -390,7 +398,7 @@ jobs:
             '      }' \
             '    }' \
             '    val recBtn = TextView(this).apply {' \
-            '      text = "● REC"' \
+            '      text = if (ScreenRecordService.isRecording) "■ STOP" else "● REC"' \
             '      setTextColor(Color.parseColor("#FF285C"))' \
             '      textSize = 12f' \
             '      setPadding(dp(4), dp(2), dp(8), dp(2))' \
@@ -407,6 +415,9 @@ jobs:
             '          startActivity(reqIntent)' \
             '        }' \
             '      }' \
+            '    }' \
+            '    ScreenRecordService.onStateChange = { recording ->' \
+            '      recBtn.text = if (recording) "■ STOP" else "● REC"' \
             '    }' \
             '    val openBtn = TextView(this).apply {' \
             '      text = "APP"' \
@@ -446,6 +457,7 @@ jobs:
             '    panelView = box' \
             '  }' \
             '  override fun onDestroy() {' \
+            '    ScreenRecordService.onStateChange = null' \
             '    panelView?.let { try { windowManager?.removeView(it) } catch (_: Exception) {} }' \
             '    panelView = null' \
             '    super.onDestroy()' \
@@ -507,6 +519,9 @@ jobs:
             '      override fun onPermissionRequest(request: PermissionRequest) {' \
             '        runOnUiThread { request.grant(request.resources) }' \
             '      }' \
+            '    }' \
+            '    ScreenRecordService.onStateChange = { recording ->' \
+            '      webViewRef?.post { webViewRef?.evaluateJavascript("if(window.onNativeRecordStateChanged)window.onNativeRecordStateChanged(" + recording + ");", null) }' \
             '    }' \
             '    setContentView(webView)' \
             '    requestAppPermissions()' \
