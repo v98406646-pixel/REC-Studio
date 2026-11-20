@@ -39,20 +39,23 @@ jobs:
           mkdir -p app/src/main/java/com/example/recstudio app/src/main/res/values app/src/main/assets
 
           HTML_SRC=""
-          for candidate in index.html src/index.html public/index.html www/index.html; do
+          for candidate in index.html Index.html src/index.html public/index.html www/index.html; do
             if [ -f "$candidate" ] && [ -s "$candidate" ]; then
               HTML_SRC="$candidate"
               break
             fi
           done
           if [ -z "$HTML_SRC" ]; then
-            FOUND_HTML=$(find . -maxdepth 3 -name "index.html" ! -path "./app/*" ! -path "./.git/*" -size +0c | head -n 1 || true)
+            FOUND_HTML=$(find . -maxdepth 4 -iname "*.html" ! -path "./app/*" ! -path "./.git/*" -size +0c | head -n 1 || true)
             if [ -n "$FOUND_HTML" ]; then
               HTML_SRC="$FOUND_HTML"
             fi
           fi
           if [ -n "$HTML_SRC" ]; then
+            echo "Using HTML source: $HTML_SRC"
             cp "$HTML_SRC" app/src/main/assets/index.html
+          else
+            echo "WARNING: No HTML file found in repository!"
           fi
 
           printf '%s\n' \
@@ -132,6 +135,7 @@ jobs:
             '  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />' \
             '  <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />' \
             '  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />' \
+            '  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />' \
             '  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />' \
             '  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />' \
             '  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />' \
@@ -145,12 +149,123 @@ jobs:
             '        <category android:name="android.intent.category.LAUNCHER" />' \
             '      </intent-filter>' \
             '    </activity>' \
+            '    <service android:name=".OverlayService" android:exported="false" android:foregroundServiceType="specialUse" />' \
             '  </application>' \
             '</manifest>' > app/src/main/AndroidManifest.xml
 
           printf '%s\n' \
             '<?xml version="1.0" encoding="utf-8"?>' \
             '<resources><string name="app_name">REC Studio</string></resources>' > app/src/main/res/values/strings.xml
+
+          printf '%s\n' \
+            'package com.example.recstudio' \
+            'import android.app.Notification' \
+            'import android.app.NotificationChannel' \
+            'import android.app.NotificationManager' \
+            'import android.app.PendingIntent' \
+            'import android.app.Service' \
+            'import android.content.Intent' \
+            'import android.graphics.Color' \
+            'import android.graphics.PixelFormat' \
+            'import android.graphics.drawable.GradientDrawable' \
+            'import android.os.Build' \
+            'import android.os.IBinder' \
+            'import android.view.Gravity' \
+            'import android.view.MotionEvent' \
+            'import android.view.View' \
+            'import android.view.WindowManager' \
+            'import android.widget.LinearLayout' \
+            'import android.widget.TextView' \
+            'class OverlayService : Service() {' \
+            '  private var windowManager: WindowManager? = null' \
+            '  private var panelView: View? = null' \
+            '  override fun onBind(intent: Intent?): IBinder? = null' \
+            '  override fun onCreate() {' \
+            '    super.onCreate()' \
+            '    startForegroundNotification()' \
+            '    showOverlayPanel()' \
+            '  }' \
+            '  private fun startForegroundNotification() {' \
+            '    val channelId = "rec_studio_overlay"' \
+            '    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {' \
+            '      val mgr = getSystemService(NotificationManager::class.java)' \
+            '      val ch = NotificationChannel(channelId, "REC Studio Panel", NotificationManager.IMPORTANCE_LOW)' \
+            '      mgr?.createNotificationChannel(ch)' \
+            '    }' \
+            '    val openIntent = Intent(this, MainActivity::class.java).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }' \
+            '    val pending = PendingIntent.getActivity(this, 0, openIntent, PendingIntent.FLAG_IMMUTABLE)' \
+            '    val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(this, channelId) else @Suppress("DEPRECATION") Notification.Builder(this)' \
+            '    val notification = builder.setContentTitle("REC Studio").setContentText("Панель поверх окон активна").setSmallIcon(android.R.drawable.presence_video_online).setContentIntent(pending).build()' \
+            '    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {' \
+            '      startForeground(2026, notification)' \
+            '    } else {' \
+            '      @Suppress("DEPRECATION") startForeground(2026, notification)' \
+            '    }' \
+            '  }' \
+            '  private fun showOverlayPanel() {' \
+            '    if (panelView != null) return' \
+            '    val wm = getSystemService(WINDOW_SERVICE) as WindowManager' \
+            '    windowManager = wm' \
+            '    val density = resources.displayMetrics.density' \
+            '    fun dp(v: Int): Int = (v * density).toInt()' \
+            '    val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE' \
+            '    val params = WindowManager.LayoutParams(WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT, layoutType, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT).apply {' \
+            '      gravity = Gravity.TOP or Gravity.START' \
+            '      x = dp(16)' \
+            '      y = dp(140)' \
+            '    }' \
+            '    val box = LinearLayout(this).apply {' \
+            '      orientation = LinearLayout.HORIZONTAL' \
+            '      gravity = Gravity.CENTER_VERTICAL' \
+            '      setPadding(dp(10), dp(6), dp(10), dp(6))' \
+            '      background = GradientDrawable().apply {' \
+            '        setColor(Color.parseColor("#CC140D24"))' \
+            '        cornerRadius = dp(18).toFloat()' \
+            '        setStroke(dp(1), Color.parseColor("#556C3EF4"))' \
+            '      }' \
+            '    }' \
+            '    val openBtn = TextView(this).apply {' \
+            '      text = "REC"' \
+            '      setTextColor(Color.WHITE)' \
+            '      textSize = 12f' \
+            '      setPadding(dp(6), dp(2), dp(8), dp(2))' \
+            '      setOnClickListener {' \
+            '        val i = Intent(this@OverlayService, MainActivity::class.java).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP) }' \
+            '        startActivity(i)' \
+            '      }' \
+            '    }' \
+            '    val closeBtn = TextView(this).apply {' \
+            '      text = "×"' \
+            '      setTextColor(Color.parseColor("#FF285C"))' \
+            '      textSize = 14f' \
+            '      setPadding(dp(6), dp(2), dp(4), dp(2))' \
+            '      setOnClickListener { stopSelf() }' \
+            '    }' \
+            '    box.addView(openBtn)' \
+            '    box.addView(closeBtn)' \
+            '    var initX = 0; var initY = 0; var touchX = 0f; var touchY = 0f' \
+            '    box.setOnTouchListener { _, ev ->' \
+            '      when (ev.action) {' \
+            '        MotionEvent.ACTION_DOWN -> { initX = params.x; initY = params.y; touchX = ev.rawX; touchY = ev.rawY; false }' \
+            '        MotionEvent.ACTION_MOVE -> {' \
+            '          val dx = (ev.rawX - touchX).toInt(); val dy = (ev.rawY - touchY).toInt()' \
+            '          if (kotlin.math.abs(dx) > 6 || kotlin.math.abs(dy) > 6) {' \
+            '            params.x = initX + dx; params.y = initY + dy' \
+            '            wm.updateViewLayout(box, params); true' \
+            '          } else false' \
+            '        }' \
+            '        else -> false' \
+            '      }' \
+            '    }' \
+            '    wm.addView(box, params)' \
+            '    panelView = box' \
+            '  }' \
+            '  override fun onDestroy() {' \
+            '    panelView?.let { try { windowManager?.removeView(it) } catch (_: Exception) {} }' \
+            '    panelView = null' \
+            '    super.onDestroy()' \
+            '  }' \
+            '}' > app/src/main/java/com/example/recstudio/OverlayService.kt
 
           printf '%s\n' \
             'package com.example.recstudio' \
@@ -198,12 +313,26 @@ jobs:
             '    }' \
             '    setContentView(webView)' \
             '    requestAppPermissions()' \
+            '    startOverlayIfPermitted()' \
             '    val localIndex = File(filesDir, "index.html")' \
-            '    val assetExists = try { assets.open("index.html").use { true } } catch (_: Exception) { false }' \
+            '    val assetExists = try { assets.open("index.html").use { it.available() > 0 } } catch (_: Exception) { false }' \
             '    when {' \
             '      localIndex.exists() && localIndex.length() > 0L -> webView.loadUrl("file://" + localIndex.absolutePath)' \
             '      assetExists -> webView.loadUrl("file:///android_asset/index.html")' \
-            '      else -> webView.loadUrl("https://raw.githubusercontent.com/v98406646-pixel/REC-Studio/main/index.html")' \
+            '      else -> {' \
+            '        val fallbackHtml = "<html><body style=\"background:#111;color:#fff;font-family:sans-serif;padding:24px\"><h2>REC Studio</h2><p>Файл index.html не найден в репозитории и в APK.</p><p>Загрузите <b>index.html</b> в корень ветки <b>main</b> репозитория <b>REC-Studio</b> и пересоберите приложение.</p></body></html>"' \
+            '        webView.loadDataWithBaseURL(null, fallbackHtml, "text/html", "UTF-8", null)' \
+            '      }' \
+            '    }' \
+            '  }' \
+            '  override fun onResume() {' \
+            '    super.onResume()' \
+            '    startOverlayIfPermitted()' \
+            '  }' \
+            '  private fun startOverlayIfPermitted() {' \
+            '    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)) {' \
+            '      val i = Intent(this, OverlayService::class.java)' \
+            '      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i) else startService(i)' \
             '    }' \
             '  }' \
             '  private fun requestAppPermissions() {' \
