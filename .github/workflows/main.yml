@@ -10,20 +10,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-java@v5
         with:
           java-version: "17"
           distribution: "temurin"
-      - run: |
-          cat <<'SH' > build.sh
-          #!/usr/bin/env bash
-          set -e
 
+      - name: Setup SDK and create REC Studio project structure
+        run: |
+          set -e
           SDK_DIR="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
           mkdir -p "$SDK_DIR"
-          export ANDROID_HOME="$SDK_DIR"
-          export ANDROID_SDK_ROOT="$SDK_DIR"
-          export PATH="$SDK_DIR/cmdline-tools/latest/bin:$SDK_DIR/platform-tools:$PATH"
+          echo "ANDROID_HOME=$SDK_DIR" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_DIR" >> "$GITHUB_ENV"
+          echo "$SDK_DIR/cmdline-tools/latest/bin:$SDK_DIR/platform-tools" >> "$GITHUB_PATH"
 
           if [ ! -x "$SDK_DIR/cmdline-tools/latest/bin/sdkmanager" ]; then
             mkdir -p "$SDK_DIR/cmdline-tools"
@@ -33,10 +33,17 @@ jobs:
             rm -f /tmp/cmdtools.zip
           fi
 
-          yes | sdkmanager --sdk_root="$SDK_DIR" --licenses >/dev/null || true
-          sdkmanager --sdk_root="$SDK_DIR" "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+          yes | "$SDK_DIR/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$SDK_DIR" --licenses >/dev/null || true
+          "$SDK_DIR/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$SDK_DIR" "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
-          mkdir -p app/src/main/java/com/example/recstudio app/src/main/res/values
+          mkdir -p .github/workflows
+          mkdir -p app/src/main/java/com/example/recstudio
+          mkdir -p app/src/main/res/values
+          mkdir -p app/src/main/res/mipmap-mdpi
+          mkdir -p app/src/main/res/mipmap-hdpi
+          mkdir -p app/src/main/res/mipmap-xhdpi
+          mkdir -p app/src/main/res/mipmap-xxhdpi
+          mkdir -p app/src/main/res/mipmap-xxxhdpi
 
           cat <<'EOF' > settings.gradle.kts
           pluginManagement {
@@ -244,7 +251,6 @@ jobs:
           }
           EOF
 
-          rm -rf app/src/main/res/mipmap-*
           if [ -f "Icon.png" ]; then
             python3 -c '
           import os
@@ -262,10 +268,15 @@ jobs:
           '
           fi
 
-          gradle assembleDebug --console=plain --stacktrace
-          SH
-          chmod +x build.sh
-          ./build.sh
+      - name: Build REC Studio APK
+        run: |
+          set -e
+          gradle assembleDebug --console=plain || {
+            echo "=== FAILURE SUMMARY ==="
+            gradle assembleDebug --console=plain --offline 2>&1 | grep -E "(> Task |FAILURE:|Caused by:|Execution failed|error:)" -A 2 || true
+            exit 1
+          }
+
       - uses: actions/upload-artifact@v4
         with:
           name: rec-studio-apk
